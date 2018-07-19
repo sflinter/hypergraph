@@ -1,13 +1,13 @@
 from . import json_vm
-from hyperopt import hp
 from abc import ABC, abstractmethod
 import itertools
 from contextlib import contextmanager
 from functools import partial, reduce
 import types
-import numpy as np
-import numbers
+import weakref
+import copy
 
+# TODO create Pretrained weights node, think about the dependency from Resnet type...
 # TODO create a special node to get an item from a list output (or a key from a dict output)
 # TODO aggregator node?
 # TODO Variable, some nodes will accept variables in the config...
@@ -26,9 +26,7 @@ import numbers
 # TODO generate tweaks automatically by using reflection! Use annotations to mark functions responsible for tweaks
 # TODO define dependency that is, do not execute a node before the dependencies are fulfilled
 
-# TODO generalize input binding:
-# eg {'str': {1: node_id('abc')}}
-# only node_id are expanded
+# TODO parallel execution (even on multiple servers) of dependencies and input bindings!!!
 
 
 def fq_ident(idents, sep='.') -> str:
@@ -102,7 +100,7 @@ class ExecutionContext:
 
         vars_ = self._vars_per_graph.setdefault(graph, {})
         var.check_type(value)
-        vars_[var.namespace] = value
+        vars_[var.name] = value
 
     def get_var_value(self, graph=None, var=None):
         var = Graph.get_node_ext(var, graph)
@@ -113,21 +111,20 @@ class ExecutionContext:
         vars_ = self._vars_per_graph.get(graph)
         if vars_ is None:
             return None
-        return vars_[var.namespace]
+        return vars_[var.name]
 
 
 class Node(ABC):
     _id_counter = itertools.count()
 
-    def __init__(self, namespace=None, flags=()):   # TODO rename name?
-        if namespace is None:
-            namespace = 'node-'+str(next(self._id_counter))
-
-        if not isinstance(namespace, str):
+    def __init__(self, name=None, flags=()):   # TODO rename name?
+        if name is None:
+            name = 'node-'+str(next(self._id_counter))
+        if not isinstance(name, str):
             raise ValueError('Node name must be a string')
-        self._ns = namespace
-        self._parent = None     # the graph that contains this node
-        self._input_binding = None
+
+        self._ns = name
+        self._parent_wref = None     # the graph that contains this node
         self._flags = flags
 
         #if self is not Graph.get_default():
@@ -135,16 +132,25 @@ class Node(ABC):
 
     @staticmethod
     def get_name(node) -> str:
+        if isinstance(node, Node) or isinstance(node, NodeId):
+            return node.name
+        raise ValueError('The input param must be either a NodeId or a Node, '
+                         'the current type is {}'.format(type(node)))
+
+    @staticmethod
+    def nodeId(node):
+        if isinstance(node, NodeId):
+            return node
         if isinstance(node, Node):
-            return node.namespace
-        if not isinstance(node, str):
-            raise ValueError('The input param must be either a string identifier of an object of type Node, '
-                             'the current type is {}'.format(type(node)))
-        return node
+            return NodeId(node.name)   # TODO use fully qualified name!
+        raise ValueError('The input param must be either a NodeId or a Node, '
+                         'the current type is {}'.format(type(node)))
 
     @property
-    def namespace(self) -> str:     # TODO rename name
+    def name(self) -> str:
         return self._ns
+
+    # TODO fully_qualified_name
 
     @property
     def consumed(self):
@@ -152,7 +158,7 @@ class Node(ABC):
         Indicates whether this node is part of a graph
         :return:
         """
-        return self._parent is not None
+        return self._parent_wref is not None
 
     @property
     def parent(self):
@@ -160,24 +166,19 @@ class Node(ABC):
         This property returns the graph that contains this node
         :return: a Graph
         """
-        return self._parent
+        ref = self._parent_wref
+        if ref is not None:
+            return ref()
+        return None
 
     @property
     def flags(self) -> tuple:
         return self._flags
 
     def get_input_binding(self, hpopt_config={}):
-        return self._input_binding
-
-    def set_input_binding(self, input_binding):
-        """
-        Setter used by the container to inject input bindings.
-        It can be used to intercept the injection during the graph construction to check whether all requirements for
-        the node are fulfilled.
-        :param input_binding:
-        :return:
-        """
-        self._input_binding = input_binding   #TODO deepcopy
+        g = self.parent
+        assert g is not None
+        return g.get_node_input_binding(self)
 
     # TODO remove hpopt_config_ranges, create a more generic idea,
     # for example provide node's "tweaks" (switches) relative to a specific context
@@ -187,7 +188,6 @@ class Node(ABC):
     # When we return a tweak configuration we return a list or dictionary (or a more complex structure)
     # where the user value are substituted by placeholders. Placeholders like hyperopt may contain a range of validity
 
-    @abstractmethod
     def get_hpopt_config_ranges(self) -> dict:
         """
         Return a dictionary with the hyperopt ranges. The keys must be fully qualified identifiers of the internal
@@ -197,10 +197,15 @@ class Node(ABC):
         """
         return {}
 
+    def create_name_gen(self):
+        # TODO take into account the parents!!!
+        return name_gen(self.name)
+
     @abstractmethod
     def __call__(self, input, hpopt_config={}):
         """
-        This methods builds the layers based on the input and hyper perameter optimizer params
+        This method executed the node, note that the internal permanent status should be stored in the current
+        execution context.
         :param input: The input(s) to this node
         :param hpopt_config: A dictionary with the values choosed by the hyper parameters optimizer, the params that aren't
         specified will take the default value (from definition)
@@ -227,9 +232,6 @@ class Identity(Node):
     def deserializer(id=None):
         return Identity(id)
 
-    def get_hpopt_config_ranges(self):
-        return {}
-
     def __call__(self, input, hpopt_config={}):
         return input
 
@@ -251,14 +253,14 @@ def mark(name=None) -> Node:
     return node
 
 
-class Placeholder(Node):
+class InputPlaceholder(Node):
     """
     A node that represents the input of a graph
     """
     def __init__(self, key=None, match_all_inputs=False):
         self.key = key
         self.match_all_inputs = bool(match_all_inputs)
-        super(Placeholder, self).__init__()
+        super(InputPlaceholder, self).__init__()
 
     def select_input(self, input):
         if self.match_all_inputs:
@@ -267,70 +269,36 @@ class Placeholder(Node):
 
     @staticmethod
     def deserializer(key=None, match_all_inputs=False):
-        return Placeholder(key, match_all_inputs)
-
-    def set_input_binding(self, input_binding):
-        if input_binding is not None:
-            raise ValueError('Input binding not supported for placeholders')
-
-    def get_hpopt_config_ranges(self):
-        return {}
+        return InputPlaceholder(key, match_all_inputs)
 
     def __call__(self, input, hpopt_config={}):
         raise ValueError('Placeholders are not executable')
 
 
-def placeholder(key=None, match_all_inputs=False):
-    node = Placeholder(key, match_all_inputs)
+def input_key(key=None):
+    node = InputPlaceholder(key, match_all_inputs=False)
     Graph.get_default().add_node(node)
     return node
 
 
-def placeholder_all(key=None):
+def input_all():
     #TODO generate just one node placeholder_all per graph
-    return placeholder(key, True)
-
-
-class Static(Node):
-    # TODO declare pure node
-
-    def __init__(self, name=None, value=None):
-        self.value = value
-        super(Static, self).__init__(name, flags=('p',))
-
-    @staticmethod
-    def deserializer(value=None):
-        return Identity(name=None, value=value)
-
-    def get_hpopt_config_ranges(self):
-        return {}
-
-    def __call__(self, input, hpopt_config={}):
-        if input is not None:
-            raise ValueError('Static nodes are not supposed to receive any input')
-        return self.value
-
-
-def static(value) -> Node:
-    """
-    Returns a node representing a static value.
-    :param value:
-    :return:
-    """
-    node = Static(name=None, value=value)
+    node = InputPlaceholder(key=None, match_all_inputs=True)
     Graph.get_default().add_node(node)
     return node
 
 
 class Merge(Node):
     def __init__(self, name=None, mode='d'):
-        if not(mode in ('l', 'd')):
+        """
+        Init merge node.
+        :param name:
+        :param mode: 'd': dictionary mode
+        """
+        if not(mode in ('d', )):
             raise ValueError()
         self.mode = mode
         super(Merge, self).__init__(name)
-
-    def get_hpopt_config_ranges(self):
-        return {}
 
     @staticmethod
     def _dict_to_items(obj):
@@ -345,10 +313,6 @@ class Merge(Node):
                 d.update(itertools.chain(*map(self._dict_to_items, input)))
                 return d
 
-            if self.mode == 'l':
-                return itertools.chain(*input)
-
-            raise RuntimeError()
         raise ValueError()
 
 
@@ -358,32 +322,67 @@ def merge(mode):
     return node
 
 
+class NodeId:
+    # TODO include "graph id" (to be decided) although the id can be either fully qualified and relative
+    def __init__(self, name):
+        if not isinstance(name, str):
+            raise ValueError()
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+
+def node(node):
+    # TODO Adapt a graph to node, in the future a graph won't be a node anymore?
+
+    node = Graph.adapt(Graph.expand(node))
+    #if isinstance(node, str):
+    #    node = NodePlaceholder(reference_name=node)
+    if isinstance(node, Node):
+        Graph.get_default().add_node(node)
+        return node
+
+    raise ValueError()
+    #return NodeId(node)
+
+
+def node_ref(node):
+    if isinstance(node, str):
+        return NodeId(node)
+    if isinstance(node, NodeId):
+        return node
+    if isinstance(node, Node):
+        Graph.get_default().add_node(node)
+        return NodeId(node.name)
+    raise ValueError()
+
+
 class GetKeys(Node):
     """
     Gets elements from lists or dictionaries
     """
 
     def __init__(self, name=None, keys=None, output_type=None):
-        self.keys = keys
-        self.output_type = output_type
+        if not isinstance(keys, list):
+            raise ValueError()
         if not(output_type in [None, 'd']):
             raise ValueError()
+        self.keys = keys
+        self.output_type = output_type
         super(GetKeys, self).__init__(name)
 
     @staticmethod
     def deserializer(keys, output_type=None):
         return GetKeys(name=None, keys=keys, output_type=output_type)
 
-    def get_hpopt_config_ranges(self):
-        return {}
-
     def __call__(self, input, hpopt_config={}):
         if self.output_type == 'd':
-            values = multi_iterable_map(lambda k: input[k], multi_iterable_get_values_as_list(self.keys))
-            keys = multi_iterable_get_keys_as_list(self.keys)
-            return dict(zip(keys, values))
+            values = [input[k] for k in self.keys]
+            return dict(zip(self.keys, values))
 
-        return multi_iterable_map(lambda k: input[k], self.keys)
+        return [input[k] for k in self.keys]
 
 
 def get_keys(keys, output_type=None):
@@ -392,33 +391,31 @@ def get_keys(keys, output_type=None):
     return node
 
 
-def get_input_keys(keys, output_type=None):
-    return link(get_keys(keys=keys, output_type=output_type), placeholder_all())
+def input_keys(keys, output_type=None):
+    return link(get_keys(keys=keys, output_type=output_type), input_all())
 
 
-class Dummy(Node):
-    def __init__(self, namespace=None):
-        super(Dummy, self).__init__(namespace)
+class Dump(Node):
+    def __init__(self, name=None):
+        super().__init__(name)
 
     @staticmethod
-    def deserializer(id):
-        return Dummy(id)
-
-    def get_hpopt_config_ranges(self):
-        h = HPOptHelpers(self.namespace)
-        default = [
-            h.def_choice('option1', tuple(['abc'+str(i) for i in range(4)])),
-            h.def_choice('option2', tuple(['def'+str(i) for i in range(4)]))
-        ]
-        return dict(default)
+    def deserializer(name=None):
+        return Dump(name)
 
     def __call__(self, input, hpopt_config={}):
-        hpopt_helper = HPOptHelpers(self.namespace, hpopt_config)
-        return hpopt_helper.build_choice('option1', input, lambda input_, config: {'input': input_, 'config': config})
+        """
+        Dump the input and return it so it can be used transparently.
+        :param input:
+        :param hpopt_config:
+        :return:
+        """
+        print(input)
+        return input
 
 
-def dummy(name=None):
-    node = Dummy(name)
+def dump(name=None):
+    node = Dump(name)
     Graph.get_default().add_node(node)
     return node
 
@@ -428,21 +425,24 @@ class Switch(Node):
     A node that switches between multiple inputs
     """
 
-    def __init__(self, namespace=None, default_choice=None):
+    # TODO define the actor that will move the switch
+    def __init__(self, name=None, default_choice=None):
         #TODO allow different probabilities for different inputs
         self.default_choice = default_choice
-        super(Switch, self).__init__(namespace)
+        super().__init__(name)
 
     @staticmethod
-    def deserializer(id):
-        return Switch(id)
+    def deserializer(name):
+        return Switch(name)
 
     def get_hpopt_config_ranges(self):
-        input_binding = self._input_binding
+        g = self.parent
+        assert g is not None
+        input_binding = g.get_node_input_binding(node)
         if input_binding is None:
             return {}
 
-        h = HPOptHelpers(self.namespace)
+        h = HPOptHelpers(self.name)
         if isinstance(input_binding, list):
             return dict([h.def_choice('options', list(range(len(input_binding))))])
 
@@ -452,19 +452,19 @@ class Switch(Node):
         raise ValueError()
 
     def get_input_binding(self, hpopt_config={}):
-        choice = HPOptHelpers(self.namespace, hpopt_config).get_choice('options', self.default_choice)
+        choice = HPOptHelpers(self.name, hpopt_config).get_choice('options', self.default_choice)
         if choice is None:
             return None
-        return self._input_binding[choice]
+
+        g = self.parent
+        assert g is not None
+        input_binding = g.get_node_input_binding(node)
+        assert input_binding is not None
+        return input_binding[choice]
 
     def __call__(self, input, hpopt_config={}):
+        # the selection is performed in the get_input_binding so here we simply return the input
         return input
-        #if input is None:
-        #    return None
-        #hpopt_helper = HPOptHelpers(self.namespace, hpopt_config)
-        #return hpopt_helper.build_choice('options', input,
-        #                                 lambda input_, config: input_[config],
-        #                                 default_choice=self.default_choice)
 
 
 def switch(name=None, default_choice=None) -> Node:
@@ -473,33 +473,51 @@ def switch(name=None, default_choice=None) -> Node:
     return node
 
 
-def link(node, input_bindings=None) -> [Node, None]:
+def link(node, input_bindings=None, deps=None) -> [Node, None]:
     """
     Creates a (lazy) link in the current graph between the node and the nodes identified by the input_bindings
     :param node: A string identifier of the node or a Node object
     :param input_bindings:
+    :param deps:
     :return: node if node is an instance of Node
     """
 
     graph = Graph.get_default()
 
-    node = Graph.expand(node)   # TODO run adapter here
+    node = Graph.expand(node)
     graph.add_node_if_obj(node)
 
     if input_bindings is not None:
-        # early checking in case of static nodes
-        if isinstance(node, Static):
-            raise ValueError('Static nodes do not have any input')
-
-        input_bindings = Graph.expand(input_bindings)   # TODO run adapter here
-        for n in multi_iterable_get_values_as_list(input_bindings):
+        input_bindings = Graph.expand(input_bindings)
+        for n in get_nodes_from_struct(input_bindings):
             graph.add_node_if_obj(n)
 
-        input_bindings = multi_iterable_map(Node.get_name, input_bindings)
-        graph.link(node, input_bindings)
+        input_bindings = substitute_nodes(input_bindings, Node.nodeId)
+    graph.link(node, input_bindings)
+
+    graph.clear_dep(node)
+    if deps is not None:
+        deps = get_nodes_from_struct(Graph.expand(deps))
+        for n in deps:
+            graph.add_node_if_obj(n)
+        graph.add_dep(node, substitute_nodes(deps, Node.nodeId))
 
     if isinstance(node, Node):
         return node
+    return Graph.nodeId(node)
+
+
+def add_event_handler(event, deps):
+    if deps is None:
+        raise ValueError()
+
+    graph = Graph.get_default()
+
+    deps = get_nodes_from_struct(Graph.expand(deps))
+    for n in deps:
+        graph.add_node_if_obj(n)
+
+    graph.add_event_handler(event, substitute_nodes(deps, Node.nodeId))
 
 
 class Lambda(Node):
@@ -509,9 +527,6 @@ class Lambda(Node):
         self.func = func
         super(Lambda, self).__init__(name)
 
-    def get_hpopt_config_ranges(self):
-        return {}
-
     def __call__(self, input, hpopt_config={}):
         return self.func(input)
 
@@ -519,6 +534,7 @@ class Lambda(Node):
 def lambda_(f) -> Node:
     """
     Creates a lambda node. Note it is also useful to create callbacks by behaving like an identity.
+    Another possibility is using the node function: node(lambda x: ...)
     :param f: The callable invoked by the node. The only input argument is the input of the node, the output of the
     callable is returned as node's output.
     :return: The lambda node
@@ -536,29 +552,61 @@ def multi_iterable_map(fn, iterable):
     return fn(iterable)
 
 
-def multi_iterable_get_values_as_list(iterable):
-    if isinstance(iterable, list):
-        return iterable
-    if isinstance(iterable, dict):
-        return list(iterable.values())
-    return [iterable]
+def substitute_nodes(nodes, lookup_fn):
+    if isinstance(nodes, list):
+        output = []
+        for obj in nodes:
+            if isinstance(obj, (NodeId, Node)):
+                output.append(lookup_fn(obj))
+            elif isinstance(obj, (list, dict)):
+                output.append(substitute_nodes(obj, lookup_fn))
+            else:
+                output.append(obj)
+        return output
+    elif isinstance(nodes, dict):
+        output = {}
+        for key, obj in nodes.items():
+            if isinstance(obj, (NodeId, Node)):
+                output[key] = lookup_fn(obj)
+            elif isinstance(obj, (list, dict)):
+                output[key] = substitute_nodes(obj, lookup_fn)
+            else:
+                output[key] = obj
+        return output
+    elif isinstance(nodes, (NodeId, Node)):
+        return lookup_fn(nodes)
+    else:
+        return nodes
 
 
-def multi_iterable_get_keys_as_list(iterable):
+def get_nodes_from_struct(iterable, output=None):
+    if output is None:
+        output = []
+
+    def op(obj):
+        if isinstance(obj, (Node, NodeId)):
+            output.append(obj)
+        elif isinstance(obj, list):
+            get_nodes_from_struct(obj, output)
+        elif isinstance(obj, dict):
+            get_nodes_from_struct(obj, output)
+
     if isinstance(iterable, list):
-        return iterable
-    if isinstance(iterable, dict):
-        return list(iterable.keys())
-    return [iterable]
+        for obj in iterable:
+            op(obj)
+    elif isinstance(iterable, dict):
+        for obj in iterable.values():
+            op(obj)
+    elif isinstance(iterable, (Node, NodeId)):
+        output.append(iterable)
+
+    return output
 
 
 class Variable(Node):
     def __init__(self, name, dtypes=None):       # TODO initial value!
         self._dtypes = dtypes
         super(Variable, self).__init__(name)
-
-    def get_hpopt_config_ranges(self):
-        return {}
 
     @property
     def dtypes(self):
@@ -577,7 +625,7 @@ class Variable(Node):
         return ExecutionContext.get_default().get_var_value(self)
 
 
-#TODO class Subgraph(Node)
+# TODO class Subgraph(Node) the call node() will adapt a graph to a node through Subgraph
 
 
 class GraphCallback:
@@ -594,13 +642,13 @@ class Graph(Node):
     #TODO serializer & deserializer
 
     @classmethod
-    def get_default(cls):
+    def get_default(cls, name=None):
         """
         Returns the default graph. If there is no default graph then a new one is instantiated
         :return:
         """
         if cls._default is None:
-            cls._default = Graph()
+            cls._default = Graph(name=name)
         return cls._default
 
     @classmethod
@@ -611,12 +659,16 @@ class Graph(Node):
         """
         cls._default = None
 
-    def __init__(self, id=None, default_output=None, callback: GraphCallback=None):
-        self.nodes = {}
-        self.lazy_links = {}    # key is the node name, value is an input binding
+    def __init__(self, name=None, default_output=None, callback: GraphCallback=None):
+        # TODO specifiy parallel=True|False, that is whether the graph nodes are allowed to
+        # be executed in parallel
+        self.nodes = {}    # key is the node name, value is a node object
+        self.links = {}    # key is the node name, value is an input binding
+        self.deps = {}     # key is the node name, value is a list of node names
+        self.event_handlers = {}    # key is event name, value is a node object
         self.default_output = default_output
         self.callback = callback
-        super(Graph, self).__init__(id)
+        super().__init__(name)
 
     @contextmanager
     def as_default(self):
@@ -631,6 +683,40 @@ class Graph(Node):
         finally:
             Graph._default = prev_default
 
+    def add_dep(self, node, dependencies):
+        """
+        Add a list of dependencies to a specific node. Dependencies are executed before the current node.
+        Input bindings are themselves dependencies but are considered separately.
+        :param node: The dependent node
+        :param dependencies: A node or a list of nodes
+        :return:
+        """
+        node = Node.get_name(node)
+        if isinstance(dependencies, list):
+            self.deps.setdefault(node, set()).update(map(Node.get_name, dependencies))
+        else:
+            self.deps.setdefault(node, set()).add(Node.get_name(dependencies))
+
+    def remove_dep(self, node, dependencies):
+        # TODO
+        raise NotImplementedError()
+
+    def clear_dep(self, node):
+        """
+        Remove all dependencies for the specified node
+        :param node:
+        :return:
+        """
+        self.deps.setdefault(node, set()).clear()
+
+    def get_node_deps(self, node):
+        """
+        Return a list of dependencies relative to the current node.
+        :param node: The dependent node
+        :return:
+        """
+        return list(self.deps.get(Node.get_name(node), set()))
+
     def link(self, node, input_binding=None):
         """
         If node is an identifier then a lazy binding is created. In the case the node is an instance of Node
@@ -639,29 +725,34 @@ class Graph(Node):
         :param input_binding:
         :return: If the node is an instance of Node then the object is returned otherwise None
         """
+
         if isinstance(node, Node):
-            # In the case the node object is provided directly we remove any lazy link and we set the
-            # input bindings directly
-            self.lazy_links.pop(node.namespace, None)
-            node.set_input_binding(input_binding)
-            return
+            # TODO check whether node is instance of InputPlaceholder
+            # raise ValueError('Input binding not supported for input placeholders')
+            pass
 
-        if not isinstance(node, str):
-            raise ValueError('The node name is not a string')
-        self.lazy_links[node] = input_binding
+        node = Node.get_name(node)
+        assert isinstance(node, str)
+        self.links[node] = copy.deepcopy(input_binding)
 
-    # TODO remove input binding from Nodes? How to deal with hpopt?
-    # TODO create another runtime link in the execution context?
-    #def get_input_binding_for_node(self, node):
-    #    name = Node.get_name(node)
-    #    return copy.copy(self.lazy_links.get(name))
+    def add_event_handler(self, event, nodes):
+        if event not in self.event_types:
+            raise ValueError()
+        handlers = self.event_handlers.setdefault(event, set())
+        for node in substitute_nodes(get_nodes_from_struct(nodes), self.get_node):
+            handlers.add(node)
+
+    def remove_event_handler(self, event, nodes):
+        handlers = self.event_handlers.get(event)
+        for node in substitute_nodes(get_nodes_from_struct(nodes), self.get_node):
+            handlers.discard(node)
 
     def add_node_if_obj(self, node):
-        if isinstance(node, str):
+        if isinstance(node, NodeId):
             return
         self.add_node(node)
 
-    def add_node(self, node, input_binding=None):
+    def add_node(self, node):
         """
         Adds a node and the relative input bindings to the graph
         :param node: An object of type Node
@@ -670,20 +761,20 @@ class Graph(Node):
         :return:
         """
 
-        # TODO adapter, if node is not an instance of Node, look for an adapter..., call adapter in the expand function
-
         if node is self:
             raise ValueError('A graph cannot be a child of itself')
 
         if isinstance(node, Node):
-            if node._parent is not None and node._parent!=self:
-                raise ValueError('The node is already part of another Graph')
-            if input_binding is not None:
-                node.set_input_binding(input_binding)
+            if node.parent is not None:
+                if node.parent != self:
+                    raise ValueError('The node is already part of another Graph')
+                else:
+                    return
 
-            #TODO check if there is a name conflict
-            self.nodes[node.namespace] = node
-            node._parent = self
+            if node.name in self.nodes:
+                raise ValueError('Duplicate node name error')
+            self.nodes[node.name] = node
+            node._parent_wref = weakref.ref(self)
 
             if self.callback is not None:
                 self.callback.on_node_add(graph=self, node=node)
@@ -707,6 +798,13 @@ class Graph(Node):
             return node
         raise ValueError('Not enough data provided')
 
+    def get_node_input_binding(self, node):
+        node = Node.get_name(node)
+        input_binding = self.links.get(node)
+        if input_binding is not None:
+            input_binding = copy.deepcopy(input_binding)
+        return input_binding
+
     def get_node(self, node):
         """
         If node is an identifier of a node it looks up for it and returns the associated node. If node is an instance
@@ -721,6 +819,8 @@ class Graph(Node):
                 raise ValueError(ownership_err_str)
             return node
 
+        if isinstance(node, NodeId):
+            node = node.name
         if not isinstance(node, str):
             raise ValueError('Param node must be a string identifier or an object of the instance Node')
 
@@ -744,7 +844,7 @@ class Graph(Node):
 
         def lookup_output(self, node):
             """
-            Returns the output of the execution of a specific node. This is a helper function to be used by multi_iterable_map
+            Returns the output of the execution of a specific node. This is a helper function to be used by substitute_nodes
             :param node: An identifier of a node or a Node object
             :return: The node output
             """
@@ -762,7 +862,7 @@ class Graph(Node):
             filtered_nodes = filter(lambda n: not n.flags.contains('p'),
                                     [self.parent.nodes[k] for k in self.node_output_map.keys()])
             for n in filtered_nodes:
-                self.node_output_map.pop(n.namespace)
+                self.node_output_map.pop(n.name)
 
         def run_node(self, node, hpopt_config={}):
             """
@@ -773,27 +873,44 @@ class Graph(Node):
             """
 
             parent = self.parent
+
+            def run_deps(node):
+                for d in parent.get_node_deps(node):
+                    # TODO in the future these will be executed in parallel
+                    self.run_node(d, hpopt_config)
+
             node = parent.get_node(node)
-            if node.namespace in self.node_output_map:
-                # this node has already been processed
-                return
+            # use node_name instead of node.name because the pleceholder may change the current node
+            # the same applies to input_binding
+            node_name = node.name
+            input_binding = node.get_input_binding(hpopt_config)
+            run_deps(node)
 
-            if isinstance(node, Placeholder):
-                self.node_output_map[node.namespace] = node.select_input(self.graph_input)
-                self._callback_on_node_exec(node)
-                return
+            changed = True
+            while changed:
+                changed = False
 
-            # now lookup the input binding
-            input_binding = parent.lazy_links.get(node.namespace)  # the lazy binding has the priority
-            if input_binding is None:
-                input_binding = node.get_input_binding(hpopt_config)
+                if node_name in self.node_output_map:
+                    # this node has already been processed
+                    return
+
+                #if isinstance(node, NodePlaceholder):
+                #    changed = True
+                #    node = parent.get_node(node.reference_name)
+                #    run_deps(node)
+
+                if isinstance(node, InputPlaceholder):
+                    # TODO if deps != [] emit a warning
+                    self.node_output_map[node_name] = node.select_input(self.graph_input)
+                    self._callback_on_node_exec(node)
+                    return
 
             if input_binding is None:
                 # the node doesn't have an input
-                self.node_output_map[node.namespace] = node(None, hpopt_config)
+                self.node_output_map[node_name] = node(None, hpopt_config)
                 return
 
-            requirements = multi_iterable_get_values_as_list(input_binding)
+            requirements = get_nodes_from_struct(input_binding)
             for req in requirements:
                 req_name = Node.get_name(req)
                 if req_name not in parent.nodes:
@@ -806,14 +923,28 @@ class Graph(Node):
                     assert req_name in self.node_output_map
 
             # All requirements are fulfilled so exec the node and store the output
-            self.node_output_map[node.namespace] = node(multi_iterable_map(self.lookup_output, input_binding),
+            self.node_output_map[node_name] = node(substitute_nodes(input_binding, lookup_fn=self.lookup_output),
                                                         hpopt_config=hpopt_config)
             self._callback_on_node_exec(node)
 
+        def run_event_handlers(self, event, hpopt_config):
+            handlers = self.parent.event_handlers.get(event)
+            if handlers is not None:
+                for h in handlers:
+                    self.run_node(h, hpopt_config)
+
         def run(self, nodes, hpopt_config={}):
-            for req in multi_iterable_get_values_as_list(nodes):
+            # Execute on enter handlers
+            self.run_event_handlers('enter', hpopt_config)
+
+            for req in get_nodes_from_struct(nodes):
                 self.run_node(req, hpopt_config)
-            return multi_iterable_map(self.lookup_output, nodes)
+            output = substitute_nodes(nodes, self.lookup_output)
+
+            # Execute on exit handlers
+            self.run_event_handlers('exit', hpopt_config)
+
+            return output
 
     def __call__(self, input=None, hpopt_config={}, outputs=None):
         """
@@ -833,37 +964,42 @@ class Graph(Node):
     @classmethod
     def expand(cls, obj):
         vm = json_vm.VM('#$#', cls.operators_reg)
-        obj = vm.run(obj)
+        return vm.run(obj)
+
+    @classmethod
+    def adapt(cls, obj):
         adapter = cls.adapters.get(type(obj))   # TODO check key using issubclass()
         if adapter:
             return adapter(obj)
-        # TODO if no adapter present and not Node or string, encapsulate into a static automatically???
         return obj
 
 
-def return_(collection):
+def return_(collection, deps=None):
     """
     Sets the default output of the current graph
     :param collection: A node or an identifier or a list or dictionary of the same
     :return:
     """
-    Graph.get_default().default_output = collection
+
+    output = link(identity(), collection, deps=deps)
+    Graph.get_default().default_output = output
 
 
 Graph.operators_reg = {
-    '#$#g.dummy': Dummy.deserializer,
-    '#$#g.placeholder': Placeholder.deserializer,
-    '#$#g.placeholder_all': partial(Placeholder.deserializer, match_all_inputs=True),
+    '#$#g.dump': Dump.deserializer,
+    '#$#g.input': InputPlaceholder.deserializer,
+    '#$#g.input_all': partial(InputPlaceholder.deserializer, match_all_inputs=True),
     '#$#g.identity': Identity.deserializer,
     '#$#g.switch': Switch.deserializer,
-    '#$#g.static': Static.deserializer,
     '#$#g.return': return_,
     '#$#g.get_keys': get_keys,
-    '#$#g.get_input_keys': get_input_keys,
+    '#$#g.input_keys': input_keys,
     '#$#g.merge': merge
 }
 
+Graph.event_types = {'enter', 'exit'}   # TODO exception handler
+
 Graph.adapters = {  # A map type: adapter
     types.FunctionType: lambda_,
-    # TODO Graph: Subgraph
+    # TODO Graph: Subgraph?
 }
