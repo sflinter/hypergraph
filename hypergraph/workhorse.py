@@ -29,7 +29,8 @@ class Group(abc.ABC):
     @abstractmethod
     def callback(self, job, value=None, ex=None):
         """
-        Callback invoked by the worker at the end of the execution of a job.
+        Callback invoked by the worker at the end of the execution of a job. This call must be thread safe
+        because it may be invoked by multiple concurrent threads.
         :param job: The job object correspondent to this call
         :param value: The value returned by job's run
         :param ex: The exception thrown by job's run
@@ -52,6 +53,10 @@ class Job(abc.ABC):
 
     @abstractmethod
     def run(self):
+        """
+        Method executed by the worker. Implementations must specify this method.
+        :return: The value to be returned to the associated callback.
+        """
         pass
 
     def _run(self):
@@ -65,9 +70,9 @@ class Job(abc.ABC):
             group.callback(self, value=v)
 
 
-class _Worker(Thread):
+class _LocalWorker(Thread):
     """
-    The worker thread. This class is internal and should't invoked directly.
+    A worker running on a local thread. This class is internal and should't invoked directly.
     """
 
     def __init__(self, worker_id, queue: Queue):
@@ -119,6 +124,10 @@ class _Worker(Thread):
 
 
 class Workhorse:
+    """
+    A manager for a group of workers.
+    """
+
     def __init__(self):
         self.next_worker_id = itertools.count(start=1)
         self._worker_count = 0
@@ -131,7 +140,7 @@ class Workhorse:
         :return: The worker id of the new thread
         """
         worker_id = next(self.next_worker_id)
-        th = _Worker(worker_id=worker_id, queue=self.queue)
+        th = _LocalWorker(worker_id=worker_id, queue=self.queue)
         th.setDaemon(True)
         th.start()
         self._worker_count += 1
@@ -170,6 +179,13 @@ class Workhorse:
         return self._worker_count
 
     def enqueue(self, job: Job):
+        """
+        Enqueue a new job into the workhorse's queue. Note that this method is not thread safe from the point of
+        view of the job, that is if the same job in enqueue concurrently multiple times it may be consumed multiple
+        times.
+        :param job:
+        :return:
+        """
         if not isinstance(job, Job):
             raise ValueError()
         if job._consumed:
