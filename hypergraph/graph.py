@@ -123,12 +123,12 @@ class Node(ABC):
         if not isinstance(name, str):
             raise ValueError('Node name must be a string')
 
-        self._ns = name
+        self._name = name
         self._parent_wref = None     # the graph that contains this node
         self._flags = flags
 
-        #if self is not Graph.get_default():
-        #    Graph.get_default().add_node(self)
+        if self is not Graph.get_default():
+            Graph.get_default().add_node(self)
 
     @staticmethod
     def get_name(node) -> str:
@@ -148,7 +148,7 @@ class Node(ABC):
 
     @property
     def name(self) -> str:
-        return self._ns
+        return self._name
 
     # TODO fully_qualified_name
 
@@ -236,6 +236,7 @@ class Identity(Node):
         return input
 
 
+# TODO remove!!!
 def identity(name=None) -> Node:
     node = Identity(name)
     Graph.get_default().add_node(node)
@@ -248,9 +249,7 @@ def mark(name=None) -> Node:
     :param name: The identifier of the identity node
     :return:
     """
-    node = Identity(name)
-    Graph.get_default().add_node(node)
-    return node
+    return Identity(name)
 
 
 class InputPlaceholder(Node):
@@ -276,16 +275,12 @@ class InputPlaceholder(Node):
 
 
 def input_key(key=None):
-    node = InputPlaceholder(key, match_all_inputs=False)
-    Graph.get_default().add_node(node)
-    return node
+    return InputPlaceholder(key, match_all_inputs=False)
 
 
 def input_all():
     #TODO generate just one node placeholder_all per graph
-    node = InputPlaceholder(key=None, match_all_inputs=True)
-    Graph.get_default().add_node(node)
-    return node
+    return InputPlaceholder(key=None, match_all_inputs=True)
 
 
 class Merge(Node):
@@ -317,9 +312,7 @@ class Merge(Node):
 
 
 def merge(mode):
-    node = Merge(name=None, mode=mode)
-    Graph.get_default().add_node(node)
-    return node
+    return Merge(name=None, mode=mode)
 
 
 class NodeId:
@@ -335,17 +328,14 @@ class NodeId:
 
 
 def node(node):
-    # TODO Adapt a graph to node, in the future a graph won't be a node anymore?
-
     node = Graph.adapt(Graph.expand(node))
-    #if isinstance(node, str):
-    #    node = NodePlaceholder(reference_name=node)
+
     if isinstance(node, Node):
-        Graph.get_default().add_node(node)
         return node
+    if isinstance(node, (NodeId, str)):
+        return Graph.get_default().get_node(node)
 
     raise ValueError()
-    #return NodeId(node)
 
 
 def node_ref(node):
@@ -354,7 +344,7 @@ def node_ref(node):
     if isinstance(node, NodeId):
         return node
     if isinstance(node, Node):
-        Graph.get_default().add_node(node)
+        # Graph.get_default().add_node(node)
         return NodeId(node.name)
     raise ValueError()
 
@@ -386,9 +376,7 @@ class GetKeys(Node):
 
 
 def get_keys(keys, output_type=None):
-    node = GetKeys(name=None, keys=keys, output_type=output_type)
-    Graph.get_default().add_node(node)
-    return node
+    return GetKeys(name=None, keys=keys, output_type=output_type)
 
 
 def input_keys(keys, output_type=None):
@@ -415,9 +403,7 @@ class Dump(Node):
 
 
 def dump(name=None):
-    node = Dump(name)
-    Graph.get_default().add_node(node)
-    return node
+    return Dump(name)
 
 
 class Switch(Node):
@@ -468,9 +454,7 @@ class Switch(Node):
 
 
 def switch(name=None, default_choice=None) -> Node:
-    node = Switch(name, default_choice)
-    Graph.get_default().add_node(node)
-    return node
+    return Switch(name, default_choice)
 
 
 def link(node, input_bindings=None, deps=None) -> [Node, None]:
@@ -486,6 +470,7 @@ def link(node, input_bindings=None, deps=None) -> [Node, None]:
 
     node = Graph.expand(node)
     graph.add_node_if_obj(node)
+    # TODO remove add, check ownership instead
 
     if input_bindings is not None:
         input_bindings = Graph.expand(input_bindings)
@@ -539,9 +524,7 @@ def lambda_(f) -> Node:
     callable is returned as node's output.
     :return: The lambda node
     """
-    node = Lambda(func=f)
-    Graph.get_default().add_node(node)
-    return node
+    return Lambda(func=f)
 
 
 def multi_iterable_map(fn, iterable):
@@ -606,7 +589,7 @@ def get_nodes_from_struct(iterable, output=None):
 class Variable(Node):
     def __init__(self, name, dtypes=None):       # TODO initial value!
         self._dtypes = dtypes
-        super(Variable, self).__init__(name)
+        super().__init__(name)
 
     @property
     def dtypes(self):
@@ -636,7 +619,30 @@ class GraphCallback:
         pass
 
 
-class Graph(Node):
+@contextmanager
+def sequential_link():
+    g = Graph.get_default()
+    prev_value = g.sequential_link_prev_node
+    g.sequential_link_prev_node = 0     # when this var is not None then sequential linking is enabled
+    yield
+    g.sequential_link_prev_node = prev_value
+
+
+class Subgraph(Node):
+    def __init__(self, name=None, graph=None):
+        if not isinstance(graph, Graph):
+            raise ValueError()
+        self.graph = graph
+        super().__init__(name)
+
+    def get_hpopt_config_ranges(self):
+        return self.graph.get_hpopt_config_ranges()
+
+    def __call__(self, input, hpopt_config={}):
+        return self.graph(input, hpopt_config=hpopt_config)
+
+
+class Graph:
     _default = None
 
     #TODO serializer & deserializer
@@ -668,7 +674,8 @@ class Graph(Node):
         self.event_handlers = {}    # key is event name, value is a node object
         self.default_output = default_output
         self.callback = callback
-        super().__init__(name)
+        assert name is None # TODO remove param name
+        self.sequential_link_prev_node = None
 
     @contextmanager
     def as_default(self):
@@ -752,6 +759,18 @@ class Graph(Node):
             return
         self.add_node(node)
 
+    def _auto_link(self, node):
+        """
+        Il sequential linking is enabled, then link automatically current node to the previous one.
+        :param node: current node
+        :return:
+        """
+        prev_node = self.sequential_link_prev_node
+        if prev_node is not None:
+            if isinstance(prev_node, Node):
+                self.link(node, prev_node)
+            self.sequential_link_prev_node = node
+
     def add_node(self, node):
         """
         Adds a node and the relative input bindings to the graph
@@ -761,14 +780,14 @@ class Graph(Node):
         :return:
         """
 
-        if node is self:
-            raise ValueError('A graph cannot be a child of itself')
+        # TODO allow a subgraph(self) to be a node of itself?
 
         if isinstance(node, Node):
             if node.parent is not None:
                 if node.parent != self:
                     raise ValueError('The node is already part of another Graph')
                 else:
+                    self._auto_link(node)
                     return
 
             if node.name in self.nodes:
@@ -778,6 +797,7 @@ class Graph(Node):
 
             if self.callback is not None:
                 self.callback.on_node_add(graph=self, node=node)
+            self._auto_link(node)
             return
 
         raise ValueError('The node argument must be an instance of the class Node')
@@ -821,6 +841,7 @@ class Graph(Node):
 
         if isinstance(node, NodeId):
             node = node.name
+        # Note: get_node(str) is a valid possibility
         if not isinstance(node, str):
             raise ValueError('Param node must be a string identifier or an object of the instance Node')
 
@@ -1001,5 +1022,5 @@ Graph.event_types = {'enter', 'exit'}   # TODO exception handler
 
 Graph.adapters = {  # A map type: adapter
     types.FunctionType: lambda_,
-    # TODO Graph: Subgraph?
+    Graph: lambda g: Subgraph(graph=g)
 }

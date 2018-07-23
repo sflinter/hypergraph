@@ -13,7 +13,7 @@ import itertools
 
 class _CloseSignal:
     """
-    A special class used to stop a worker
+    A special class used to send a stop signal to a worker.
     """
     pass
 
@@ -75,52 +75,85 @@ class _LocalWorker(Thread):
     A worker running on a local thread. This class is internal and should't invoked directly.
     """
 
-    def __init__(self, worker_id, queue: Queue):
+    def __init__(self, worker_id, queue: Queue, records_per_request=1):
+        if not isinstance(records_per_request, int):
+            raise ValueError()
+        if records_per_request <= 0:
+            raise ValueError()
+
         Thread.__init__(self)
         self.worker_id = worker_id
         self.queue = queue
         self.close_flag = False
+        self.records_per_request = records_per_request
 
-    def _get_job(self):
+    def _get_job(self, count=1):
+        if count <= 0:
+            raise ValueError()
+
         queue = self.queue
-
+        first = True
+        output = []
         try:
             while True:
-                job = queue.get(block=True)
+                job = queue.get(block=first)
+                first = False
 
                 if isinstance(job, _CloseSignal):
+                    # Note: when a close signal is detected we have to return immediately
+                    # otherwise we may get the closed signals addressed to the other workers
                     self.close_flag = True
                     queue.task_done()
+                    if count > 1:
+                        return output
                     return None
 
                 if isinstance(job, Job):
-                    # the main loop must invoke queue.task_done()
+                    # Note: the main loop must invoke queue.task_done() for each record returned
+                    if count > 1:
+                        output.append(job)
+                        if len(output) >= count:
+                            break
+                        continue
                     return job
 
                 # unknown record type
                 queue.task_done()
         except Queue.Empty:
             pass
+        assert count > 1
+        return output
+
+    def _run_job(self, job):
+        """
+        Run the provided job, at the end task_done is invoked on the queue.
+        :param job:
+        :return:
+        """
+        try:
+            job._run()
+        except:
+            # TODO monitor errors
+            traceback.print_exc()
+            pass
+        finally:
+            self.queue.task_done()
 
     def run(self):
-        queue = self.queue
-
         while True:
             if self.close_flag:
                 return
 
-            job = self._get_job()
+            job = self._get_job(self.records_per_request)
             if job is None:
                 continue
 
-            try:
-                job._run()
-            except:
-                # TODO monitor errors
-                traceback.print_exc()
-                pass
-            finally:
-                queue.task_done()
+            if isinstance(job, list):
+                jobs = job
+                for job in jobs:
+                    self._run_job(job)
+            else:
+                self._run_job(job)
 
 
 class Workhorse:
@@ -169,6 +202,7 @@ class Workhorse:
         else:
             for _ in range(-diff):
                 self.queue.put(_CloseSignal())
+                self._worker_count -= 1
 
     @property
     def worker_count(self) -> int:
