@@ -213,6 +213,17 @@ class Node(ABC):
         """
         pass
 
+    def __getitem__(self, key):
+        """
+        Return a get_key node linked to the current one with the specified key
+        :param key:
+        :return:
+        """
+        return link(get_key(key), self)
+
+    def __lshift__(self, other):
+        return link(self, other)
+
     def serialize(self):
         """
         Serializes the node into a json serializable format
@@ -335,7 +346,8 @@ def node(node):
     if isinstance(node, (NodeId, str)):
         return Graph.get_default().get_node(node)
 
-    raise ValueError()
+    # adapt everything else
+    return link(Identity(), node)
 
 
 def node_ref(node):
@@ -346,7 +358,10 @@ def node_ref(node):
     if isinstance(node, Node):
         # Graph.get_default().add_node(node)
         return NodeId(node.name)
-    raise ValueError()
+
+    # adapt everything else
+    node = link(Identity(), node)
+    return NodeId(node.name)
 
 
 class GetKeys(Node):
@@ -355,8 +370,6 @@ class GetKeys(Node):
     """
 
     def __init__(self, name=None, keys=None, output_type=None):
-        if not isinstance(keys, list):
-            raise ValueError()
         if not(output_type in [None, 'd']):
             raise ValueError()
         self.keys = keys
@@ -368,6 +381,9 @@ class GetKeys(Node):
         return GetKeys(name=None, keys=keys, output_type=output_type)
 
     def __call__(self, input, hpopt_config={}):
+        if not isinstance(self.keys, list):
+            return input[self.keys]
+
         if self.output_type == 'd':
             values = [input[k] for k in self.keys]
             return dict(zip(self.keys, values))
@@ -375,8 +391,25 @@ class GetKeys(Node):
         return [input[k] for k in self.keys]
 
 
+class GetKey(Node):
+    """
+    Get an element from lists or dictionaries
+    """
+
+    def __init__(self, name=None, key=None):
+        self.key = key
+        super().__init__(name)
+
+    def __call__(self, input, hpopt_config={}):
+        return input[self.key]
+
+
 def get_keys(keys, output_type=None):
     return GetKeys(name=None, keys=keys, output_type=output_type)
+
+
+def get_key(key):
+    return GetKey(name=None, key=key)
 
 
 def input_keys(keys, output_type=None):
@@ -424,7 +457,7 @@ class Switch(Node):
     def get_hpopt_config_ranges(self):
         g = self.parent
         assert g is not None
-        input_binding = g.get_node_input_binding(node)
+        input_binding = g.get_node_input_binding(self)
         if input_binding is None:
             return {}
 
