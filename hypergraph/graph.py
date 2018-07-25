@@ -6,6 +6,7 @@ from functools import partial, reduce
 import types
 import weakref
 import copy
+from .utils import export
 
 # TODO create Pretrained weights node, think about the dependency from Resnet type...
 # TODO create a special node to get an item from a list output (or a key from a dict output)
@@ -41,6 +42,7 @@ def fq_ident(idents, sep='.') -> str:
     return reduce(lambda s1, s2: s1 + sep + str(s2), idents)
 
 
+@export
 class ExecutionContext:
     """
     The execution context stores the runtime values of a graph's instance
@@ -114,6 +116,7 @@ class ExecutionContext:
         return vars_[var.name]
 
 
+@export
 class Node(ABC):
     _id_counter = itertools.count()
 
@@ -222,6 +225,9 @@ class Node(ABC):
         return link(get_key(key), self)
 
     def __lshift__(self, other):
+        if isinstance(other, Dependency):
+            other.inject(self)
+            return self
         return link(self, other)
 
     def serialize(self):
@@ -247,13 +253,7 @@ class Identity(Node):
         return input
 
 
-# TODO remove!!!
-def identity(name=None) -> Node:
-    node = Identity(name)
-    Graph.get_default().add_node(node)
-    return node
-
-
+@export
 def mark(name=None) -> Node:
     """
     Mark is a pseudonym of identity. The idea is to mark internal placeholders (from the graph point of view)
@@ -285,10 +285,13 @@ class InputPlaceholder(Node):
         raise ValueError('Placeholders are not executable')
 
 
+@export
 def input_key(key=None):
+    # TODO provide also: input()[key]?
     return InputPlaceholder(key, match_all_inputs=False)
 
 
+@export
 def input_all():
     #TODO generate just one node placeholder_all per graph
     return InputPlaceholder(key=None, match_all_inputs=True)
@@ -322,10 +325,12 @@ class Merge(Node):
         raise ValueError()
 
 
+@export
 def merge(mode):
     return Merge(name=None, mode=mode)
 
 
+@export
 class NodeId:
     # TODO include "graph id" (to be decided) although the id can be either fully qualified and relative
     def __init__(self, name):
@@ -338,6 +343,7 @@ class NodeId:
         return self._name
 
 
+@export
 def node(node):
     node = Graph.adapt(Graph.expand(node))
 
@@ -350,6 +356,7 @@ def node(node):
     return link(Identity(), node)
 
 
+@export
 def node_ref(node):
     if isinstance(node, str):
         return NodeId(node)
@@ -404,15 +411,19 @@ class GetKey(Node):
         return input[self.key]
 
 
+@export
 def get_keys(keys, output_type=None):
     return GetKeys(name=None, keys=keys, output_type=output_type)
 
 
+@export
 def get_key(key):
     return GetKey(name=None, key=key)
 
 
+@export
 def input_keys(keys, output_type=None):
+    # TODO provide also: get_keys(input(), ...)
     return link(get_keys(keys=keys, output_type=output_type), input_all())
 
 
@@ -435,6 +446,7 @@ class Dump(Node):
         return input
 
 
+@export
 def dump(name=None):
     return Dump(name)
 
@@ -477,7 +489,7 @@ class Switch(Node):
 
         g = self.parent
         assert g is not None
-        input_binding = g.get_node_input_binding(node)
+        input_binding = g.get_node_input_binding(self)
         assert input_binding is not None
         return input_binding[choice]
 
@@ -486,10 +498,12 @@ class Switch(Node):
         return input
 
 
+@export
 def switch(name=None, default_choice=None) -> Node:
     return Switch(name, default_choice)
 
 
+@export
 def link(node, input_bindings=None, deps=None) -> [Node, None]:
     """
     Creates a (lazy) link in the current graph between the node and the nodes identified by the input_bindings
@@ -525,6 +539,7 @@ def link(node, input_bindings=None, deps=None) -> [Node, None]:
     return Graph.nodeId(node)
 
 
+@export
 def add_event_handler(event, deps):
     if deps is None:
         raise ValueError()
@@ -539,6 +554,11 @@ def add_event_handler(event, deps):
 
 
 class Lambda(Node):
+    """
+    A node that encapsulates a lambda function. Another possibility is using the node function: node(lambda x: ...)
+    The only input argument of the lambda is the input of the node, the output of the callable is returned as node's output.
+    """
+
     def __init__(self, name=None, func=None):
         if not callable(func):
             raise ValueError("Param func should be a callable")
@@ -547,17 +567,6 @@ class Lambda(Node):
 
     def __call__(self, input, hpopt_config={}):
         return self.func(input)
-
-
-def lambda_(f) -> Node:
-    """
-    Creates a lambda node. Note it is also useful to create callbacks by behaving like an identity.
-    Another possibility is using the node function: node(lambda x: ...)
-    :param f: The callable invoked by the node. The only input argument is the input of the node, the output of the
-    callable is returned as node's output.
-    :return: The lambda node
-    """
-    return Lambda(func=f)
 
 
 def multi_iterable_map(fn, iterable):
@@ -619,6 +628,7 @@ def get_nodes_from_struct(iterable, output=None):
     return output
 
 
+@export
 class Variable(Node):
     def __init__(self, name, dtypes=None):       # TODO initial value!
         self._dtypes = dtypes
@@ -641,9 +651,6 @@ class Variable(Node):
         return ExecutionContext.get_default().get_var_value(self)
 
 
-# TODO class Subgraph(Node) the call node() will adapt a graph to a node through Subgraph
-
-
 class GraphCallback:
     def on_node_execution_end(self, ctx: ExecutionContext, graph, **args):
         pass
@@ -652,6 +659,7 @@ class GraphCallback:
         pass
 
 
+@export
 @contextmanager
 def sequential_link():
     g = Graph.get_default()
@@ -675,6 +683,34 @@ class Subgraph(Node):
         return self.graph(input, hpopt_config=hpopt_config)
 
 
+class Dependency:
+    """
+    A class used to inject node dependencies using the shift operator
+    """
+    def __init__(self, deps):
+        self.deps = deps
+
+    def inject(self, node):
+        graph = Graph.get_default()
+
+        deps = self.deps
+        deps = get_nodes_from_struct(Graph.expand(deps))
+        for n in deps:
+            graph.add_node_if_obj(n)
+        graph.add_dep(node, substitute_nodes(deps, Node.nodeId))
+
+
+@export
+def deps(deps):
+    """
+    Inject dependencies using the node's shift operator, example: node << deps([node_ref('abc'), cde])
+    :param deps:
+    :return:
+    """
+    return Dependency(deps)
+
+
+@export
 class Graph:
     _default = None
 
@@ -1028,14 +1064,21 @@ class Graph:
         return obj
 
 
-def return_(collection, deps=None):
+@export
+def output(collection=None, deps=None):
     """
-    Sets the default output of the current graph
+    Set the default output of the current graph.
     :param collection: A node or an identifier or a list or dictionary of the same
     :return:
     """
+    if collection is None:
+        if deps is not None:
+            raise ValueError("Invalid combination of parameters")
+        n = Identity()
+        Graph.get_default().default_output = n
+        return n
 
-    output = link(identity(), collection, deps=deps)
+    output = link(Identity(), collection, deps=deps)
     Graph.get_default().default_output = output
 
 
@@ -1045,7 +1088,7 @@ Graph.operators_reg = {
     '#$#g.input_all': partial(InputPlaceholder.deserializer, match_all_inputs=True),
     '#$#g.identity': Identity.deserializer,
     '#$#g.switch': Switch.deserializer,
-    '#$#g.return': return_,
+    '#$#g.output': output,
     '#$#g.get_keys': get_keys,
     '#$#g.input_keys': input_keys,
     '#$#g.merge': merge
@@ -1054,6 +1097,6 @@ Graph.operators_reg = {
 Graph.event_types = {'enter', 'exit'}   # TODO exception handler
 
 Graph.adapters = {  # A map type: adapter
-    types.FunctionType: lambda_,
+    types.FunctionType: lambda f: Lambda(func=f),
     Graph: lambda g: Subgraph(graph=g)
 }
