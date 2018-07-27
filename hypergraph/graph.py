@@ -120,7 +120,7 @@ class ExecutionContext:
 class Node(ABC):
     _id_counter = itertools.count()
 
-    def __init__(self, name=None, flags=()):   # TODO rename name?
+    def __init__(self, name=None, flags=()):
         if name is None:
             name = 'node-'+str(next(self._id_counter))
         if not isinstance(name, str):
@@ -222,9 +222,9 @@ class Node(ABC):
         :param key:
         :return:
         """
-        return link(get_key(key), self)
+        return get_key(key, _input=self)
 
-    def __lshift__(self, other):
+    def __lshift__(self, other): # TODO do the same with NodeId!!!
         if isinstance(other, Dependency):
             other.inject(self)
             return self
@@ -242,6 +242,7 @@ class Identity(Node):
     """
     A simple node that returns the input when invoked without any modification.
     """
+
     def __init__(self, name=None):
         super(Identity, self).__init__(name)
 
@@ -398,17 +399,33 @@ class GetKeys(Node):
         return [input[k] for k in self.keys]
 
 
+class _RuntimeKey:
+    """
+    Internal placeholder class used to indicate that a key is a graph runtime value
+    """
+    pass
+
+
 class GetKey(Node):
     """
-    Get an element from lists or dictionaries
+    Get an element from a subscriptable
     """
 
-    def __init__(self, name=None, key=None):
+    def __init__(self, name=None, key=_RuntimeKey):
         self.key = key
         super().__init__(name)
 
+    @property
+    def is_key_runtime(self):
+        return self.key == _RuntimeKey
+
     def __call__(self, input, hpopt_config={}):
-        return input[self.key]
+        if self.key is _RuntimeKey:
+            subscriptable = input['subscriptable']
+            key = input['key']
+            return subscriptable[key]
+        else:
+            return input[self.key]
 
 
 @export
@@ -416,10 +433,20 @@ def get_keys(keys, output_type=None):
     return GetKeys(name=None, keys=keys, output_type=output_type)
 
 
-@export
-def get_key(key):
-    return GetKey(name=None, key=key)
+def get_key(key, _input=None):
+    if len(get_nodes_from_struct(key)) == 0:
+        # optimization for static types
+        if _input is not None:
+            return GetKey(key=key) << _input
+        return GetKey(key=key)
 
+    # param _input must be provided
+    if _input is Node:
+        raise ValueError("Invalid combination of parameters")
+
+    # TODO put key into the deps so it is evaluated first and we avoid the eval of the entire
+    # subscriptable?
+    return link(GetKey(), {'subscriptable': _input, 'key': key})
 
 @export
 def input_keys(keys, output_type=None):
@@ -649,6 +676,24 @@ class Variable(Node):
 
     def __call__(self, input, hpopt_config={}):
         return ExecutionContext.get_default().get_var_value(self)
+
+
+class Dereference(Node):
+    def __init__(self, name=None):
+        super().__init__(name)
+
+    def __call__(self, input, hpopt_config={}):
+        if not isinstance(input, str):
+            raise ValueError()
+
+        g = Graph.get_default()
+        g.get_node(node)
+
+        pass
+
+
+def deref():
+    return Dereference()
 
 
 class GraphCallback:
@@ -954,6 +999,28 @@ class Graph:
             for n in filtered_nodes:
                 self.node_output_map.pop(n.name)
 
+        def _solve_requirements(self, input_binding, hpopt_config):
+            parent = self.parent
+
+            requirements = get_nodes_from_struct(input_binding)
+            for req in requirements:
+                req_name = Node.get_name(req)
+                if req_name not in parent.nodes:
+                    raise ValueError('A node mentioned in the input bindings is not present in the current graph, '
+                                     'name=\'{}\''.format(req_name))
+
+                if req_name not in self.node_output_map:
+                    #TODO remove recursion
+                    self.run_node(req_name, hpopt_config)
+                    assert req_name in self.node_output_map
+
+        def _substitution(self, input_binding):
+            return substitute_nodes(input_binding, lookup_fn=self.lookup_output)
+
+        def _set_node_output(self, node, name, value):
+            self.node_output_map[name] = value
+            self._callback_on_node_exec(node)
+
         def run_node(self, node, hpopt_config={}):
             """
             Executes one node (after the execution of its requirements) and store the output in node_output_map
@@ -964,7 +1031,7 @@ class Graph:
 
             parent = self.parent
 
-            def run_deps(node):
+            def run_deps(node):     # TODO def _run_deps()
                 for d in parent.get_node_deps(node):
                     # TODO in the future these will be executed in parallel
                     self.run_node(d, hpopt_config)
@@ -975,6 +1042,7 @@ class Graph:
             node_name = node.name
             input_binding = node.get_input_binding(hpopt_config)
             run_deps(node)
+            # TODO create class CurrentNode with all this informations (and hpopt_config)
 
             changed = True
             while changed:
@@ -1000,22 +1068,10 @@ class Graph:
                 self.node_output_map[node_name] = node(None, hpopt_config)
                 return
 
-            requirements = get_nodes_from_struct(input_binding)
-            for req in requirements:
-                req_name = Node.get_name(req)
-                if req_name not in parent.nodes:
-                    raise ValueError('A node mentioned in the input bindings is not present in the current graph, '
-                                     'name=\'{}\''.format(req_name))
-
-                if req_name not in self.node_output_map:
-                    #TODO remove recursion
-                    self.run_node(req_name, hpopt_config)
-                    assert req_name in self.node_output_map
+            self._solve_requirements(input_binding, hpopt_config)
 
             # All requirements are fulfilled so exec the node and store the output
-            self.node_output_map[node_name] = node(substitute_nodes(input_binding, lookup_fn=self.lookup_output),
-                                                        hpopt_config=hpopt_config)
-            self._callback_on_node_exec(node)
+            self._set_node_output(node, node_name, node(self._substitution(input_binding), hpopt_config=hpopt_config))
 
         def run_event_handlers(self, event, hpopt_config):
             handlers = self.parent.event_handlers.get(event)
