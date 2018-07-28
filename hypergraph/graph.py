@@ -25,9 +25,10 @@ from .utils import export
 # TODO zip()
 # TODO tweaks declaration in the graph, they are like placeholders with a range of validity and a default value
 # TODO generate tweaks automatically by using reflection! Use annotations to mark functions responsible for tweaks
-# TODO define dependency that is, do not execute a node before the dependencies are fulfilled
 
 # TODO parallel execution (even on multiple servers) of dependencies and input bindings!!!
+# TODO input() >> ... or event(...) >> ...
+# TODO event() >> something...!!! also ctx manager for the event handler scope? Create a class Event that acts as a trigger?
 
 
 def fq_ident(idents, sep='.') -> str:
@@ -678,22 +679,25 @@ class Variable(Node):
         return ExecutionContext.get_default().get_var_value(self)
 
 
-class Dereference(Node):
-    def __init__(self, name=None):
+class Jump(Node):
+    def __init__(self, name=None, destination=None):
+        """
+        Create a Jump node
+        :param name:
+        :param destination: node id of the static destination node, if None, then the destionation node is dynamic
+        """
+        self.destination = None
+        if destination is not None:
+            self.destination = node_ref(destination)
         super().__init__(name)
 
     def __call__(self, input, hpopt_config={}):
-        if not isinstance(input, str):
-            raise ValueError()
-
-        g = Graph.get_default()
-        g.get_node(node)
-
-        pass
+        raise RuntimeError("This node is not supposed to be executed directly")
 
 
-def deref():
-    return Dereference()
+@export
+def jmp(destination=None):
+    return Jump(destination=destination)
 
 
 class GraphCallback:
@@ -1021,6 +1025,18 @@ class Graph:
             self.node_output_map[name] = value
             self._callback_on_node_exec(node)
 
+        def _handle_jmp(self, node: Jump, hpopt_config):
+            if node.destination is not None:
+                self.run_node(node.destination, hpopt_config=hpopt_config)
+                return
+
+            input_binding = node.get_input_binding(hpopt_config)
+            self._solve_requirements(input_binding, hpopt_config)
+            destination = self._substitution(input_binding)
+            destination = node_ref(destination)
+            destination = self.parent.get_node(destination)
+            self.run_node(destination, hpopt_config=hpopt_config)
+
         def run_node(self, node, hpopt_config={}):
             """
             Executes one node (after the execution of its requirements) and store the output in node_output_map
@@ -1040,29 +1056,26 @@ class Graph:
             # use node_name instead of node.name because the pleceholder may change the current node
             # the same applies to input_binding
             node_name = node.name
-            input_binding = node.get_input_binding(hpopt_config)
             run_deps(node)
             # TODO create class CurrentNode with all this informations (and hpopt_config)
 
-            changed = True
-            while changed:
-                changed = False
+            if node_name in self.node_output_map:
+                # this node has already been processed
+                return
 
-                if node_name in self.node_output_map:
-                    # this node has already been processed
-                    return
+            # *** begin of custom nodes handling ***
+            if isinstance(node, InputPlaceholder):
+                # TODO if deps != [] emit a warning
+                self.node_output_map[node_name] = node.select_input(self.graph_input)
+                self._callback_on_node_exec(node)
+                return
 
-                #if isinstance(node, NodePlaceholder):
-                #    changed = True
-                #    node = parent.get_node(node.reference_name)
-                #    run_deps(node)
+            if isinstance(node, Jump):
+                self._handle_jmp(node, hpopt_config=hpopt_config)
+                return
+            # *** end of custom nodes handling ***
 
-                if isinstance(node, InputPlaceholder):
-                    # TODO if deps != [] emit a warning
-                    self.node_output_map[node_name] = node.select_input(self.graph_input)
-                    self._callback_on_node_exec(node)
-                    return
-
+            input_binding = node.get_input_binding(hpopt_config)
             if input_binding is None:
                 # the node doesn't have an input
                 self.node_output_map[node_name] = node(None, hpopt_config)
@@ -1140,8 +1153,7 @@ def output(collection=None, deps=None):
 
 Graph.operators_reg = {
     '#$#g.dump': Dump.deserializer,
-    '#$#g.input': InputPlaceholder.deserializer,
-    '#$#g.input_all': partial(InputPlaceholder.deserializer, match_all_inputs=True),
+    '#$#g.input': partial(InputPlaceholder.deserializer, match_all_inputs=True),
     '#$#g.identity': Identity.deserializer,
     '#$#g.switch': Switch.deserializer,
     '#$#g.output': output,
