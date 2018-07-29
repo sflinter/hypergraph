@@ -476,6 +476,7 @@ class Dump(Node):
 
 @export
 def dump(name=None):
+    # TODO optional static message to display?
     return Dump(name)
 
 
@@ -591,7 +592,7 @@ class Lambda(Node):
         if not callable(func):
             raise ValueError("Param func should be a callable")
         self.func = func
-        super(Lambda, self).__init__(name)
+        super().__init__(name)
 
     def __call__(self, input, hpopt_config={}):
         return self.func(input)
@@ -698,6 +699,21 @@ class Jump(Node):
 @export
 def jmp(destination=None):
     return Jump(destination=destination)
+
+
+def _first_valid(iterable):
+    if isinstance(iterable, dict):
+        for item in iterable.items():
+            if item[1]:
+                return item[0]
+    for item in iterable:
+        if item:
+            return item
+
+
+@export
+def first_valid():
+    return Lambda(func=_first_valid)
 
 
 class GraphCallback:
@@ -1021,56 +1037,60 @@ class Graph:
         def _substitution(self, input_binding):
             return substitute_nodes(input_binding, lookup_fn=self.lookup_output)
 
-        def _set_node_output(self, node, name, value):
-            self.node_output_map[name] = value
-            self._callback_on_node_exec(node)
+        def _set_node_output(self, node, value, alias=None):
+            # TODO remove alias, pass a list of nodes instead?
+            if node is not None:
+                self.node_output_map[node.name] = value
+                self._callback_on_node_exec(node)
+            if alias is not None:
+                self.node_output_map[Node.get_name(alias)] = value
+                self._callback_on_node_exec(self.parent.get_node(alias))
 
         def _handle_jmp(self, node: Jump, hpopt_config):
+            input_binding = node.get_input_binding(hpopt_config)
             if node.destination is not None:
-                self.run_node(node.destination, hpopt_config=hpopt_config)
+                if input_binding is not None:
+                    raise RuntimeError("Jump nodes are not supposed to receive an input when"
+                                       " a static target is specified")
+                self.run_node(node.destination, hpopt_config=hpopt_config, alias=node)
                 return
 
-            input_binding = node.get_input_binding(hpopt_config)
             self._solve_requirements(input_binding, hpopt_config)
             destination = self._substitution(input_binding)
             destination = node_ref(destination)
             destination = self.parent.get_node(destination)
-            self.run_node(destination, hpopt_config=hpopt_config)
+            self.run_node(destination, hpopt_config=hpopt_config, alias=node)
 
-        def run_node(self, node, hpopt_config={}):
+        def _run_deps(self, node, hpopt_config):
+            for d in self.parent.get_node_deps(node):
+                # TODO in the future these will be executed in parallel
+                self.run_node(d, hpopt_config)
+
+        def run_node(self, node, hpopt_config={}, alias=None):
             """
             Executes one node (after the execution of its requirements) and store the output in node_output_map
             :param node: Can be an identifier or an object of class Node
             :param hpopt_config: the hyper-parameters selected by hyperopt
+            :param alias: A node (or node id) that receives the same output of the current node
             :return:
             """
 
-            parent = self.parent
+            node = self.parent.get_node(node)
+            self._run_deps(node, hpopt_config=hpopt_config)
 
-            def run_deps(node):     # TODO def _run_deps()
-                for d in parent.get_node_deps(node):
-                    # TODO in the future these will be executed in parallel
-                    self.run_node(d, hpopt_config)
-
-            node = parent.get_node(node)
-            # use node_name instead of node.name because the pleceholder may change the current node
-            # the same applies to input_binding
-            node_name = node.name
-            run_deps(node)
-            # TODO create class CurrentNode with all this informations (and hpopt_config)
-
-            if node_name in self.node_output_map:
+            if node.name in self.node_output_map:
                 # this node has already been processed
+                if alias is not None:
+                    self._set_node_output(node=None, value=self.node_output_map[node.name], alias=alias)
                 return
 
             # *** begin of custom nodes handling ***
             if isinstance(node, InputPlaceholder):
-                # TODO if deps != [] emit a warning
-                self.node_output_map[node_name] = node.select_input(self.graph_input)
-                self._callback_on_node_exec(node)
+                self._set_node_output(node, value=node.select_input(self.graph_input), alias=alias)
                 return
 
             if isinstance(node, Jump):
+                assert alias is None    # TODO what's happen if we have jmp after a jmp?!?!?!
                 self._handle_jmp(node, hpopt_config=hpopt_config)
                 return
             # *** end of custom nodes handling ***
@@ -1078,13 +1098,14 @@ class Graph:
             input_binding = node.get_input_binding(hpopt_config)
             if input_binding is None:
                 # the node doesn't have an input
-                self.node_output_map[node_name] = node(None, hpopt_config)
+                self._set_node_output(node, value=node(None, hpopt_config), alias=alias)
                 return
 
             self._solve_requirements(input_binding, hpopt_config)
 
             # All requirements are fulfilled so exec the node and store the output
-            self._set_node_output(node, node_name, node(self._substitution(input_binding), hpopt_config=hpopt_config))
+            self._set_node_output(node, value=node(self._substitution(input_binding), hpopt_config=hpopt_config),
+                                  alias=alias)
 
         def run_event_handlers(self, event, hpopt_config):
             handlers = self.parent.event_handlers.get(event)
