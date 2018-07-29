@@ -2,7 +2,8 @@ from . import json_vm
 from abc import ABC, abstractmethod
 import itertools
 from contextlib import contextmanager
-from functools import partial, reduce
+from functools import reduce
+from functools import partial as fpartial
 import types
 import weakref
 import copy
@@ -697,8 +698,36 @@ class Jump(Node):
 
 
 @export
-def jmp(destination=None):
+def jmp(destination=None) -> Jump:
     return Jump(destination=destination)
+
+
+class Partial(Node):
+    def __init__(self, partial_input, name=None):
+        self.partial_input = partial_input
+        super().__init__(name)
+
+    def __call__(self, input, hpopt_config={}):
+        raise RuntimeError("This node is not supposed to be executed directly")
+
+
+@export
+def partial(partial_input):
+    return Partial(partial_input=partial_input)
+
+
+@export
+def select(idx_node, nodes) -> Node:
+    """
+    Select a node from a list or dict and jump the execution to it. This node represents a starting point, do not
+    link to another input.
+    :param idx_node: A node that returns the index
+    :param nodes: A list of nodes identifiers
+    :return:
+    """
+    nodes = mark() << nodes
+    return jmp() << nodes[idx_node]
+    # TODO the best option would be: select(idx) << [nodes identifiers]
 
 
 def _first_valid(iterable):
@@ -766,7 +795,7 @@ class Dependency:
 
 
 @export
-def deps(deps):
+def deps(deps) -> Dependency:
     """
     Inject dependencies using the node's shift operator, example: node << deps([node_ref('abc'), cde])
     :param deps:
@@ -1046,6 +1075,14 @@ class Graph:
                 self.node_output_map[Node.get_name(alias)] = value
                 self._callback_on_node_exec(self.parent.get_node(alias))
 
+        def _handle_partial(self, node: Partial, hpopt_config):
+            partial_input = node.partial_input
+            self._solve_requirements(partial_input, hpopt_config)
+            input_binding = node.get_input_binding(hpopt_config)
+            self._solve_requirements(input_binding, hpopt_config)
+            output = [self._substitution(partial_input), self._substitution(self._substitution(input_binding))]
+            self._set_node_output(node, value=output)
+
         def _handle_jmp(self, node: Jump, hpopt_config):
             input_binding = node.get_input_binding(hpopt_config)
             if node.destination is not None:
@@ -1092,6 +1129,11 @@ class Graph:
             if isinstance(node, Jump):
                 assert alias is None    # TODO what's happen if we have jmp after a jmp?!?!?!
                 self._handle_jmp(node, hpopt_config=hpopt_config)
+                return
+
+            if isinstance(node, Partial):
+                assert alias is None    # TODO what's happen if alias!=None?
+                self._handle_partial(node, hpopt_config=hpopt_config)
                 return
             # *** end of custom nodes handling ***
 
@@ -1155,10 +1197,11 @@ class Graph:
 
 
 @export
-def output(collection=None, deps=None):
+def output(collection=None, deps=None) -> Node:
     """
     Set the default output of the current graph.
-    :param collection: A node or an identifier or a list or dictionary of the same
+    :param collection: A node or an identifier or a list or dictionary of the same, this represents the output,
+    if collection is None instead, then a special node representing the output is returned.
     :return:
     """
     if collection is None:
@@ -1174,7 +1217,7 @@ def output(collection=None, deps=None):
 
 Graph.operators_reg = {
     '#$#g.dump': Dump.deserializer,
-    '#$#g.input': partial(InputPlaceholder.deserializer, match_all_inputs=True),
+    '#$#g.input': fpartial(InputPlaceholder.deserializer, match_all_inputs=True),
     '#$#g.identity': Identity.deserializer,
     '#$#g.switch': Switch.deserializer,
     '#$#g.output': output,
