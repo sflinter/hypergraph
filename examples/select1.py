@@ -7,7 +7,7 @@ with graph1.as_default():
     n = hg.mark("abc2") << (hg.dump() << "** abc2 **")
 
     idx = hg.node(lambda _: np.random.randint(0, 2))
-    hg.output() << hg.select(idx, ["abc1", "abc2"])  # select is a "head" so do not use << on it.
+    hg.output() << (hg.select(idx) << ["abc1", "abc2"])
 
 for _ in range(3):
     ctx = hg.ExecutionContext()

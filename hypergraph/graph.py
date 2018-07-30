@@ -218,6 +218,11 @@ class Node(ABC):
         raise NotImplementedError()
 
 
+class NonExecutable(Node):
+    def __call__(self, input, hpopt_config={}):
+        raise RuntimeError("This node is not supposed to be executed directly")
+
+
 class Identity(Node):
     """
     A simple node that returns the input when invoked without any modification.
@@ -244,7 +249,7 @@ def mark(name=None) -> Node:
     return Identity(name)
 
 
-class InputPlaceholder(Node):
+class InputPlaceholder(NonExecutable):
     """
     A node that represents the input of a graph
     """
@@ -261,9 +266,6 @@ class InputPlaceholder(Node):
     @staticmethod
     def deserializer(key=None, match_all_inputs=False):
         return InputPlaceholder(key, match_all_inputs)
-
-    def __call__(self, input, hpopt_config={}):
-        raise ValueError('Placeholders are not executable')
 
 
 @export
@@ -459,58 +461,6 @@ def dump(name=None):
     return Dump(name)
 
 
-class Switch(Node):
-    """
-    A node that switches between multiple inputs
-    """
-
-    # TODO define the actor that will move the switch
-    def __init__(self, name=None, default_choice=None):
-        #TODO allow different probabilities for different inputs
-        self.default_choice = default_choice
-        super().__init__(name)
-
-    @staticmethod
-    def deserializer(name):
-        return Switch(name)
-
-    def get_hpopt_config_ranges(self):
-        g = self.parent
-        assert g is not None
-        input_binding = g.get_node_input_binding(self)
-        if input_binding is None:
-            return {}
-
-        h = HPOptHelpers(self.name)
-        if isinstance(input_binding, list):
-            return dict([h.def_choice('options', list(range(len(input_binding))))])
-
-        if isinstance(input_binding, list):
-            return dict([h.def_choice('options', list(input_binding.keys()))])
-
-        raise ValueError()
-
-    def get_input_binding(self, hpopt_config={}):
-        choice = HPOptHelpers(self.name, hpopt_config).get_choice('options', self.default_choice)
-        if choice is None:
-            return None
-
-        g = self.parent
-        assert g is not None
-        input_binding = g.get_node_input_binding(self)
-        assert input_binding is not None
-        return input_binding[choice]
-
-    def __call__(self, input, hpopt_config={}):
-        # the selection is performed in the get_input_binding so here we simply return the input
-        return input
-
-
-@export
-def switch(name=None, default_choice=None) -> Node:
-    return Switch(name, default_choice)
-
-
 @export
 def link(node, input_bindings=None, deps=None) -> [Node, None]:
     """
@@ -659,7 +609,7 @@ class Variable(Node):
         return ExecutionContext.get_default().get_var_value(self)
 
 
-class Jump(Node):
+class Jump(NonExecutable):
     def __init__(self, name=None, destination=None):
         """
         Create a Jump node
@@ -671,22 +621,28 @@ class Jump(Node):
             self.destination = node_ref(destination)
         super().__init__(name)
 
-    def __call__(self, input, hpopt_config={}):
-        raise RuntimeError("This node is not supposed to be executed directly")
-
 
 @export
 def jmp(destination=None) -> Jump:
     return Jump(destination=destination)
 
 
-class Partial(Node):
+class Indirect(NonExecutable):
+    def __init__(self, name=None, input_node=None, output_node=None):
+        self.input_node = node_ref(input_node)
+        self.output_node = node_ref(output_node)
+        super().__init__(name)
+
+
+@export
+def indirect(input_node=None, output_node=None) -> Indirect:
+    return Indirect(input_node=input_node, output_node=output_node)
+
+
+class Partial(NonExecutable):
     def __init__(self, partial_input, name=None):
         self.partial_input = partial_input
         super().__init__(name)
-
-    def __call__(self, input, hpopt_config={}):
-        raise RuntimeError("This node is not supposed to be executed directly")
 
 
 @export
@@ -695,17 +651,22 @@ def partial(partial_input):
 
 
 @export
-def select(idx_node, nodes) -> Node:
+def select(idx_node, nodes=None) -> Node:
     """
-    Select a node from a list or dict and jump the execution to it. This node represents a starting point, do not
-    link to another input.
+    Select a node from a list or dict (provided as input) and jump the execution to it. If param nodes is specified
+    then the returned node is a head, thus do not provide an input.
     :param idx_node: A node that returns the index
     :param nodes: A list of nodes identifiers
     :return:
     """
-    nodes = mark() << nodes
-    return jmp() << nodes[idx_node]
-    # TODO the best option would be: select(idx) << [nodes identifiers]
+    if nodes is not None:
+        nodes = mark() << nodes
+        return jmp() << nodes[idx_node]
+
+    input = mark()
+    output = jmp() << link(GetKey(), {'subscriptable': input, 'key': idx_node})
+    output = mark() << output   # indirect return to avoid Graph._Executor.run_node double alias
+    return indirect(input_node=input, output_node=output)
 
 
 def _first_valid(iterable):
@@ -874,10 +835,9 @@ class Graph:
         :return: If the node is an instance of Node then the object is returned otherwise None
         """
 
-        if isinstance(node, Node):
-            # TODO check whether node is instance of InputPlaceholder
-            # raise ValueError('Input binding not supported for input placeholders')
-            pass
+        # TODO check whether node is instance of InputPlaceholder
+        if isinstance(node, Indirect):
+            node = node.input_node
 
         node = Node.get_name(node)
         assert isinstance(node, str)
@@ -1076,6 +1036,9 @@ class Graph:
             destination = self.parent.get_node(destination)
             self.run_node(destination, hpopt_config=hpopt_config, alias=node)
 
+        def _handle_indirect(self, node: Indirect, hpopt_config):
+            self.run_node(node.output_node, hpopt_config=hpopt_config, alias=node)
+
         def _run_deps(self, node, hpopt_config):
             for d in self.parent.get_node_deps(node):
                 # TODO in the future these will be executed in parallel
@@ -1112,6 +1075,11 @@ class Graph:
             if isinstance(node, Partial):
                 assert alias is None    # TODO what's happen if alias!=None?
                 self._handle_partial(node, hpopt_config=hpopt_config)
+                return
+
+            if isinstance(node, Indirect):
+                assert alias is None    # TODO what's happen if alias!=None?
+                self._handle_indirect(node, hpopt_config=hpopt_config)
                 return
             # *** end of custom nodes handling ***
 
@@ -1197,7 +1165,6 @@ Graph.operators_reg = {
     '#$#g.dump': Dump.deserializer,
     '#$#g.input': fpartial(InputPlaceholder.deserializer, match_all_inputs=True),
     '#$#g.identity': Identity.deserializer,
-    '#$#g.switch': Switch.deserializer,
     '#$#g.output': output,
     '#$#g.get_keys': get_keys,
     '#$#g.input_keys': input_keys,
