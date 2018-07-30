@@ -9,28 +9,6 @@ import weakref
 import copy
 from .utils import export
 
-# TODO create Pretrained weights node, think about the dependency from Resnet type...
-# TODO create a special node to get an item from a list output (or a key from a dict output)
-# TODO aggregator node?
-# TODO Variable, some nodes will accept variables in the config...
-# TODO invocation failure interceptors... In some cases we may decide to continue the execution even though a node fails
-# TODO round robin switch
-# TODO think how to connect this to LOG with encapsulated contexts
-
-# TODO "assign" to set a variable
-# TODO parallel(), while(var), expression()
-# TODO import ... import json definition from url or file
-# TODO special node to access current hpopt config
-# TODO declare more graph tweaks such as switch
-# TODO pure nodes
-# TODO zip()
-# TODO tweaks declaration in the graph, they are like placeholders with a range of validity and a default value
-# TODO generate tweaks automatically by using reflection! Use annotations to mark functions responsible for tweaks
-
-# TODO parallel execution (even on multiple servers) of dependencies and input bindings!!!
-# TODO input() >> ... or event(...) >> ...
-# TODO event() >> something...!!! also ctx manager for the event handler scope? Create a class Event that acts as a trigger?
-
 
 def fq_ident(idents, sep='.') -> str:
     """
