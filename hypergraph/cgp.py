@@ -28,11 +28,19 @@ class GetKeySmooth(g.Node):
 
 def select(idx_node, nodes) -> g.Node:
     """
-    Select a node from a list or dict and jump the execution to it. This node represents a starting point, do not
-    link to another input. The idx_node must return a number in the interval [0.0, 1.0], the rescale is performed
-    automatically.
+    Select a node from a list or dict and jump the execution to it.
+    The idx_node must return a number in the interval [0.0, 1.0], the rescale is performed automatically.
     :param idx_node: A node that returns the index
     :param nodes: A list of nodes identifiers
     :return:
     """
-    return g.jmp() << g.link(GetKeySmooth(), {'subscriptable': nodes, 'key': idx_node})
+
+    def main_def(nodes):
+        return g.jmp() << g.link(GetKeySmooth(), {'subscriptable': nodes, 'key': idx_node})
+
+    if nodes is None:
+        nodes = g.mark() << nodes
+        output = main_def(nodes)
+        return g.indirect(input_node=nodes, output_node=output)
+
+    return main_def(nodes)

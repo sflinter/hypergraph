@@ -8,6 +8,7 @@ import types
 import weakref
 import copy
 from .utils import export
+import inspect
 
 
 def fq_ident(idents, sep='.') -> str:
@@ -517,14 +518,39 @@ class Lambda(Node):
     The only input argument of the lambda is the input of the node, the output of the callable is returned as node's output.
     """
 
-    def __init__(self, name=None, func=None):
+    def _inspect_func(self):
+        sig = inspect.signature(self.func)
+        self.params = sig.parameters.keys()
+
+    def __init__(self, name=None, func=None, map_arguments=False):
         if not callable(func):
             raise ValueError("Param func should be a callable")
         self.func = func
+        self.map_arguments = map_arguments or hasattr(func, '_hg_func_node_tag')
+        self.params = None
+
+        self._inspect_func()
         super().__init__(name)
 
     def __call__(self, input, hpopt_config={}):
-        return self.func(input)
+        if self.map_arguments is False:
+            return self.func(input)
+
+        if isinstance(input, dict):
+            # TODO use self.params, if some flag is set...
+            return self.func(**input)
+
+        return self.func(*input)
+
+
+@export
+def func_node(f):
+    """
+    A decorator used to specify functions' options when they are used as node
+    :return:
+    """
+    f._hg_func_node_tag = True
+    return f
 
 
 def multi_iterable_map(fn, iterable):
@@ -1127,6 +1153,7 @@ class Graph:
         if outputs is None:
             return None
 
+        # TODO call user specified context manager here (useful for log)
         return self._Executor(self, input).run(outputs, hpopt_config)
 
     @classmethod
