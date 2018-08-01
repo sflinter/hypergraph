@@ -9,9 +9,14 @@ import weakref
 import copy
 from .utils import export
 import inspect
+import uuid
 
 
-def fq_ident(idents, sep='.') -> str:
+# Separator used in fully qualified names
+FQ_NAME_SEP = '.'
+
+
+def fq_ident(idents, sep=FQ_NAME_SEP) -> str:
     """
     Create a fully qualified identifier
     :param idents: list of identifiers or a string
@@ -134,7 +139,12 @@ class Node(ABC):
     def name(self) -> str:
         return self._name
 
-    # TODO fully_qualified_name
+    @property
+    def fully_qualified_name(self) -> str:
+        g = self.parent
+        if g is None:
+            raise RuntimeError()
+        return g.name + FQ_NAME_SEP + self.name
 
     @property
     def consumed(self):
@@ -546,7 +556,8 @@ class Lambda(Node):
 @export
 def func_node(f):
     """
-    A decorator used to specify functions' options when they are used as node
+    A decorator used to specify functions' options when they are used as node. For now there are not options
+    though.
     :return:
     """
     f._hg_func_node_tag = True
@@ -802,8 +813,17 @@ class Graph:
         self.event_handlers = {}    # key is event name, value is a node object
         self.default_output = default_output
         self.callback = callback
-        assert name is None # TODO remove param name
         self.sequential_link_prev_node = None
+
+        if name is None:
+            name = 'hggraph-'+str(uuid.uuid4())
+        if not isinstance(name, str):
+            raise ValueError("Graph name is expected to be a string")
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @contextmanager
     def as_default(self):
