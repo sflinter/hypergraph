@@ -133,3 +133,42 @@ def switch(default_choice=None, name=None) -> g.Node:
 def tweak(value, name=None, default_output=None) -> g.Node:
     if isinstance(value, Distribution):
         return Sample(distribution=value, name=name, default_output=default_output)
+
+
+class GeneticBase:
+    """
+    Base class for genetic algorithms applied to the Graph structure. This class contains a phenotype
+    composed by a dictionary of key:distribution pairs. The phenotype is initialized by the function create_population.
+    """
+
+    def __init__(self):
+        self.phenotype = {}
+
+    def create_population(self, graph: g.Graph, size):
+        phe = self.phenotype = graph.get_hpopt_config_ranges()
+        return [dict([(k, d.sample()) for k, d in phe.items()]) for _ in range(size)]
+
+    def crossover(self, parents):
+        """
+        Given a number of individuals (considered parents), return a new individual which is the result of the
+        crossover between the parents' genes.
+        :param parents:
+        :return:
+        """
+        if len(parents) < 2:
+            raise ValueError("At least two parents are necessary to crossover")
+        phe = self.phenotype
+        selectors = np.random.randint(low=0, high=len(parents), size=len(phe))
+        child = {}
+        for idx, gene_key in zip(selectors, phe.keys()):
+            child[gene_key] = parents[idx][gene_key]
+        return child
+
+    def mutations(self, individual, prob):
+        phe = self.phenotype
+        gene_keys = np.array(phe.keys())
+        selection = np.where(np.random.uniform(size=len(gene_keys)) < prob)
+        gene_keys = gene_keys[selection]
+        for key in gene_keys:
+            individual[key] = phe[key].sample()
+        return individual
