@@ -77,8 +77,12 @@ class ExecutionContext:
 
     # TODO store here: runtime lazy links and hpopt params
 
-    def __init__(self):
+    # TODO node context...
+    def __init__(self, tweaks={}):
+        if not isinstance(tweaks, dict):
+            raise ValueError()
         self._vars_per_graph = {}
+        self.tweaks = tweaks
 
     def set_var(self, graph=None, var=None, value=None):
         var = Graph.get_node_ext(var, graph)
@@ -1009,6 +1013,7 @@ class Graph:
             self.parent = parent
             self.graph_input = graph_input
             self.node_output_map = {}
+            self.ctx = ExecutionContext.get_default()
 
         def lookup_output(self, node):
             """
@@ -1032,7 +1037,7 @@ class Graph:
             for n in filtered_nodes:
                 self.node_output_map.pop(n.name)
 
-        def _solve_requirements(self, input_binding, hpopt_config):
+        def _solve_requirements(self, input_binding):
             parent = self.parent
 
             requirements = get_nodes_from_struct(input_binding)
@@ -1044,7 +1049,7 @@ class Graph:
 
                 if req_name not in self.node_output_map:
                     #TODO remove recursion
-                    self.run_node(req_name, hpopt_config)
+                    self.run_node(req_name)
                     assert req_name in self.node_output_map
 
         def _substitution(self, input_binding):
@@ -1059,48 +1064,47 @@ class Graph:
                 self.node_output_map[Node.get_name(alias)] = value
                 self._callback_on_node_exec(self.parent.get_node(alias))
 
-        def _handle_partial(self, node: Partial, hpopt_config):
+        def _handle_partial(self, node: Partial):
             partial_input = node.partial_input
-            self._solve_requirements(partial_input, hpopt_config)
-            input_binding = node.get_input_binding(hpopt_config)
-            self._solve_requirements(input_binding, hpopt_config)
+            self._solve_requirements(partial_input)
+            input_binding = node.get_input_binding(self.ctx.tweaks)
+            self._solve_requirements(input_binding)
             output = [self._substitution(partial_input), self._substitution(self._substitution(input_binding))]
             self._set_node_output(node, value=output)
 
-        def _handle_jmp(self, node: Jump, hpopt_config):
-            input_binding = node.get_input_binding(hpopt_config)
+        def _handle_jmp(self, node: Jump):
+            input_binding = node.get_input_binding(self.ctx.tweaks)
             if node.destination is not None:
                 if input_binding is not None:
                     raise RuntimeError("Jump nodes are not supposed to receive an input when"
                                        " a static target is specified")
-                self.run_node(node.destination, hpopt_config=hpopt_config, alias=node)
+                self.run_node(node.destination, alias=node)
                 return
 
-            self._solve_requirements(input_binding, hpopt_config)
+            self._solve_requirements(input_binding)
             destination = self._substitution(input_binding)
             destination = node_ref(destination)
             destination = self.parent.get_node(destination)
-            self.run_node(destination, hpopt_config=hpopt_config, alias=node)
+            self.run_node(destination, alias=node)
 
-        def _handle_indirect(self, node: Indirect, hpopt_config):
-            self.run_node(node.output_node, hpopt_config=hpopt_config, alias=node)
+        def _handle_indirect(self, node: Indirect):
+            self.run_node(node.output_node, alias=node)
 
-        def _run_deps(self, node, hpopt_config):
+        def _run_deps(self, node):
             for d in self.parent.get_node_deps(node):
                 # TODO in the future these will be executed in parallel
-                self.run_node(d, hpopt_config)
+                self.run_node(d)
 
-        def run_node(self, node, hpopt_config={}, alias=None):
+        def run_node(self, node, alias=None):
             """
             Executes one node (after the execution of its requirements) and store the output in node_output_map
             :param node: Can be an identifier or an object of class Node
-            :param hpopt_config: the hyper-parameters selected by hyperopt
             :param alias: A node (or node id) that receives the same output of the current node
             :return:
             """
 
             node = self.parent.get_node(node)
-            self._run_deps(node, hpopt_config=hpopt_config)
+            self._run_deps(node)
 
             if node.name in self.node_output_map:
                 # this node has already been processed
@@ -1115,58 +1119,57 @@ class Graph:
 
             if isinstance(node, Jump):
                 assert alias is None    # TODO what's happen if we have jmp after a jmp?!?!?!
-                self._handle_jmp(node, hpopt_config=hpopt_config)
+                self._handle_jmp(node)
                 return
 
             if isinstance(node, Partial):
                 assert alias is None    # TODO what's happen if alias!=None?
-                self._handle_partial(node, hpopt_config=hpopt_config)
+                self._handle_partial(node)
                 return
 
             if isinstance(node, Indirect):
                 assert alias is None    # TODO what's happen if alias!=None?
-                self._handle_indirect(node, hpopt_config=hpopt_config)
+                self._handle_indirect(node)
                 return
             # *** end of custom nodes handling ***
 
-            input_binding = node.get_input_binding(hpopt_config)
+            input_binding = node.get_input_binding(self.ctx.tweaks)
             if input_binding is None:
                 # the node doesn't have an input
-                self._set_node_output(node, value=node(None, hpopt_config), alias=alias)
+                self._set_node_output(node, value=node(None, hpopt_config=self.ctx.tweaks), alias=alias)
                 return
 
-            self._solve_requirements(input_binding, hpopt_config)
+            self._solve_requirements(input_binding)
 
             # All requirements are fulfilled so exec the node and store the output
-            self._set_node_output(node, value=node(self._substitution(input_binding), hpopt_config=hpopt_config),
+            self._set_node_output(node, value=node(self._substitution(input_binding), hpopt_config=self.ctx.tweaks),
                                   alias=alias)
 
-        def run_event_handlers(self, event, hpopt_config):
+        def run_event_handlers(self, event):
             handlers = self.parent.event_handlers.get(event)
             if handlers is not None:
                 for h in handlers:
-                    self.run_node(h, hpopt_config)
+                    self.run_node(h)
 
-        def run(self, nodes, hpopt_config={}):
+        def run(self, nodes):
             # Execute on enter handlers
-            self.run_event_handlers('enter', hpopt_config)
+            self.run_event_handlers('enter')
 
             for req in get_nodes_from_struct(nodes):
-                self.run_node(req, hpopt_config)
+                self.run_node(req)
             output = substitute_nodes(nodes, self.lookup_output)
 
             # Execute on exit handlers
-            self.run_event_handlers('exit', hpopt_config)
+            self.run_event_handlers('exit')
 
             return output
 
-    def __call__(self, input=None, hpopt_config={}, outputs=None):
+    def __call__(self, input=None, outputs=None):
         """
         Runs the output nodes and their dependencies
         :param input:
         :param outputs: A list/dict or string of identifiers of the required outputs, if None the default list of
         outputs is used
-        :param hpopt_config:
         :return:
         """
         outputs = self.default_output if outputs is None else outputs
@@ -1174,7 +1177,7 @@ class Graph:
             return None
 
         # TODO call user specified context manager here (useful for log)
-        return self._Executor(self, input).run(outputs, hpopt_config)
+        return self._Executor(self, input).run(outputs)
 
     @classmethod
     def expand(cls, obj):
