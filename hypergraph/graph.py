@@ -6,7 +6,6 @@ from functools import reduce
 from functools import partial as fpartial
 import types
 import weakref
-import copy
 from .utils import export
 import inspect
 import uuid
@@ -178,14 +177,6 @@ class Node(ABC):
         assert g is not None
         return g.get_node_input_binding(self)
 
-    # TODO remove hpopt_config_ranges, create a more generic idea,
-    # for example provide node's "tweaks" (switches) relative to a specific context
-    # one of the contexes is hpopt. Note that input bindings may depends on a particular "tweak"
-    # so, first we apply tweaks and then we build the final links. The tweaks may override
-    # the links declared in the graph, the custom links are declared in the execution context.
-    # When we return a tweak configuration we return a list or dictionary (or a more complex structure)
-    # where the user value are substituted by placeholders. Placeholders like hyperopt may contain a range of validity
-
     def get_hpopt_config_ranges(self) -> dict:
         """
         Return a dictionary with the hyperopt ranges. The keys must be fully qualified identifiers of the internal
@@ -194,10 +185,6 @@ class Node(ABC):
         :return: A dictionary
         """
         return {}
-
-    def create_name_gen(self):
-        # TODO take into account the parents!!!
-        return name_gen(self.name)
 
     @abstractmethod
     def __call__(self, input, hpopt_config={}):
@@ -261,6 +248,7 @@ def mark(name=None) -> Node:
     :param name: The identifier of the identity node
     :return:
     """
+
     return Identity(name)
 
 
@@ -569,7 +557,7 @@ def func_node(f):
 
 
 def multi_iterable_map(fn, iterable):
-    if isinstance(iterable, list):
+    if isinstance(iterable, (list, tuple)):
         return [fn(obj) for obj in iterable]
     if isinstance(iterable, dict):
         return dict([(key, fn(obj)) for key, obj in iterable.items()])
@@ -577,12 +565,12 @@ def multi_iterable_map(fn, iterable):
 
 
 def substitute_nodes(nodes, lookup_fn):
-    if isinstance(nodes, list):
+    if isinstance(nodes, (list, tuple)):
         output = []
         for obj in nodes:
             if isinstance(obj, (NodeId, Node)):
                 output.append(lookup_fn(obj))
-            elif isinstance(obj, (list, dict)):
+            elif isinstance(obj, (list, dict, tuple)):
                 output.append(substitute_nodes(obj, lookup_fn))
             else:
                 output.append(obj)
@@ -592,7 +580,7 @@ def substitute_nodes(nodes, lookup_fn):
         for key, obj in nodes.items():
             if isinstance(obj, (NodeId, Node)):
                 output[key] = lookup_fn(obj)
-            elif isinstance(obj, (list, dict)):
+            elif isinstance(obj, (list, dict, tuple)):
                 output[key] = substitute_nodes(obj, lookup_fn)
             else:
                 output[key] = obj
@@ -610,12 +598,12 @@ def get_nodes_from_struct(iterable, output=None):
     def op(obj):
         if isinstance(obj, (Node, NodeId)):
             output.append(obj)
-        elif isinstance(obj, list):
+        elif isinstance(obj, (list, tuple)):
             get_nodes_from_struct(obj, output)
         elif isinstance(obj, dict):
             get_nodes_from_struct(obj, output)
 
-    if isinstance(iterable, list):
+    if isinstance(iterable, (list, tuple)):
         for obj in iterable:
             op(obj)
     elif isinstance(iterable, dict):
@@ -625,6 +613,17 @@ def get_nodes_from_struct(iterable, output=None):
         output.append(iterable)
 
     return output
+
+
+def struct_copy(iterable):
+    # TODO remove recursion, use deepcopy strategy
+    if isinstance(iterable, (list, tuple)):
+        # Note, tuple is converted to list
+        return [struct_copy(item) for item in iterable]
+    elif isinstance(iterable, dict):
+        return dict([(k, struct_copy(v)) for k, v in iterable.items()])
+    else:
+        return iterable
 
 
 @export
@@ -754,7 +753,7 @@ class Subgraph(Node):
         return self.graph.get_hpopt_config_ranges()
 
     def __call__(self, input, hpopt_config={}):
-        return self.graph(input, hpopt_config=hpopt_config)
+        return self.graph(input)
 
 
 class Dependency:
@@ -788,8 +787,6 @@ def deps(deps) -> Dependency:
 class Graph:
     _default = None
 
-    #TODO serializer & deserializer
-
     @classmethod
     def get_default(cls, name=None):
         """
@@ -809,13 +806,22 @@ class Graph:
         cls._default = None
 
     def __init__(self, name=None, default_output=None, callback: GraphCallback=None):
-        # TODO specifiy parallel=True|False, that is whether the graph nodes are allowed to
-        # be executed in parallel
+        """
+        Init a new graph.
+        :param name: The name of the graph, this will be used to form the fully qualified names for the nodes.
+        :param default_output:
+        :param callback:
+        """
+
+        # TODO specifiy parallel=True|False, this enable/disable the parallel execution of graph nodes.
+        # By parallel execution we mean a generic one (thus a handler should be passed) and not the classical
+        # multi-thread execution.
+
         self.nodes = {}    # key is the node name, value is a node object
         self.links = {}    # key is the node name, value is an input binding
         self.deps = {}     # key is the node name, value is a list of node names
         self.event_handlers = {}    # key is event name, value is a node object
-        self.default_output = default_output
+        self.default_output = default_output    # TODO rename output, this would override the internal graph's output
         self.callback = callback
         self.sequential_link_prev_node = None
 
@@ -891,7 +897,7 @@ class Graph:
 
         node = Node.get_name(node)
         assert isinstance(node, str)
-        self.links[node] = copy.deepcopy(input_binding)
+        self.links[node] = struct_copy(input_binding)
 
     def add_event_handler(self, event, nodes):
         if event not in self.event_types:
@@ -973,7 +979,7 @@ class Graph:
         node = Node.get_name(node)
         input_binding = self.links.get(node)
         if input_binding is not None:
-            input_binding = copy.deepcopy(input_binding)
+            input_binding = struct_copy(input_binding)
         return input_binding
 
     def get_node(self, node):

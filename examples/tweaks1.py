@@ -14,8 +14,8 @@ with graph1.as_default():
     hg.output() << [a, hg.tweak(hg.UniformInt(high=100)), hg.tweak(hg.LogUniform())]
 
 # create a population from graph's phenotype
-genetic = GeneticBase()
-population = genetic.create_population(graph1, size=3)
+genetic = GeneticBase(graph1)
+population = genetic.create_population(3)
 print(population[:2])
 # crossover two parent to get a new individual
 child = genetic.crossover(population[:2])

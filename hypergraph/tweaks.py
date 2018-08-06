@@ -72,18 +72,18 @@ class IntLogUniform(Distribution):
 
 
 class Sample(g.Node):
-    def __init__(self, distribution: Distribution, default_output=None, name=None):
+    def __init__(self, distribution: Distribution, default=None, name=None):
         if not isinstance(distribution, Distribution):
             raise ValueError()
         self.distribution = distribution
-        self.default_output = default_output
+        self.default = default
         super().__init__(name)
 
     def get_hpopt_config_ranges(self):
         return {self.fully_qualified_name: self.distribution}
 
     def __call__(self, input, hpopt_config={}):
-        return hpopt_config.get(self.fully_qualified_name, self.default_output)
+        return hpopt_config.get(self.fully_qualified_name, self.default)
 
 
 class Switch(g.Node):
@@ -91,9 +91,9 @@ class Switch(g.Node):
     A node that switches between multiple inputs
     """
 
-    def __init__(self, default_choice=None, name=None):
+    def __init__(self, default=None, name=None):
         #TODO allow different probabilities for different inputs
-        self.default_choice = default_choice
+        self.default = default
         super().__init__(name)
 
     def get_hpopt_config_ranges(self):
@@ -109,7 +109,7 @@ class Switch(g.Node):
         return {self.fully_qualified_name: UniformInt(high=len(input_binding))}
 
     def get_input_binding(self, hpopt_config={}):
-        choice = hpopt_config.get(self.fully_qualified_name, self.default_choice)
+        choice = hpopt_config.get(self.fully_qualified_name, self.default)
         if choice is None:
             return None
 
@@ -125,28 +125,38 @@ class Switch(g.Node):
 
 
 @export
-def switch(default_choice=None, name=None) -> g.Node:
-    return Switch(name=name, default_choice=default_choice)
+def switch(default=None, name=None) -> g.Node:
+    return Switch(name=name, default=default)
 
 
 @export
-def tweak(value, name=None, default_output=None) -> g.Node:
+def tweak(value, name=None, default=None) -> g.Node:
+    # TODO declare "level", that is, when the tweak is applied (eg. runtime)
     if isinstance(value, Distribution):
-        return Sample(distribution=value, name=name, default_output=default_output)
+        return Sample(distribution=value, name=name, default=default)
+    raise ValueError("Input type not supported")
 
 
 class GeneticBase:
     """
     Base class for genetic algorithms applied to the Graph structure. This class contains a phenotype
-    composed by a dictionary of key:distribution pairs. The phenotype is initialized by the function create_population.
+    composed by a dictionary of key:distribution pairs.
     """
 
-    def __init__(self):
-        self.phenotype = {}
+    def __init__(self, graph: g.Graph):
+        """
+        Init the object.
+        :param graph: The graph used to initialize the phenotype.
+        """
+        self.phenotype = self.phenotype = graph.get_hpopt_config_ranges()
 
-    def create_population(self, graph: g.Graph, size):
-        phe = self.phenotype = graph.get_hpopt_config_ranges()
-        return [dict([(k, d.sample()) for k, d in phe.items()]) for _ in range(size)]
+    def create_population(self, size) -> list:
+        """
+        Create and return a population of individuals.
+        :param size: The number of individuals in the population
+        :return:
+        """
+        return [dict([(k, d.sample()) for k, d in self.phenotype.items()]) for _ in range(size)]
 
     def crossover(self, parents):
         """
@@ -165,6 +175,12 @@ class GeneticBase:
         return child
 
     def mutations(self, individual, prob):
+        """
+        Apply mutations to the provided individual. Every gene has the same probability of being mutated.
+        :param individual:
+        :param prob: Gene mutation probability
+        :return: The individual
+        """
         phe = self.phenotype
         gene_keys = np.array(list(phe.keys()))
         selection = np.where(np.random.uniform(size=len(gene_keys)) < prob)

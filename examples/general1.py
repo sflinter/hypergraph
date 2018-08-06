@@ -12,7 +12,7 @@ with graph1.as_default():
     b = hg.node(lambda x: x ** 2) << hg.input_key('nd2')  # node() can also be used to "adapt" lambda functions to nodes
     print("b.name="+b.name)
 
-    c = hg.switch('sw1', 0) << [a, hg.node_ref(a), hg.node_ref(b)]   # note multiple ref form possible
+    c = hg.switch(0, name='sw1') << [a, hg.node_ref(a), hg.node_ref(b)]   # note multiple ref form possible
 
     # TODO map node to a list or dict from input... eg foreach? act on the graph?
     # foreach iterates through items of a dictionary or list and executes another node...
