@@ -166,7 +166,7 @@ class GeneticBase:
 
     def mutations(self, individual, prob):
         phe = self.phenotype
-        gene_keys = np.array(phe.keys())
+        gene_keys = np.array(list(phe.keys()))
         selection = np.where(np.random.uniform(size=len(gene_keys)) < prob)
         gene_keys = gene_keys[selection]
         for key in gene_keys:
