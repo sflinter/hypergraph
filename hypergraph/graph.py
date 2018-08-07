@@ -461,7 +461,7 @@ class Dump(Node):
 @export
 def dump(name=None):
     # TODO optional static message to display?
-    return Dump(name)
+    return Dump(name=name)
 
 
 @export
@@ -528,7 +528,7 @@ class Lambda(Node):
         if not callable(func):
             raise ValueError("Param func should be a callable")
         self.func = func
-        self.map_arguments = map_arguments or hasattr(func, '_hg_func_node_tag')
+        self.map_arguments = map_arguments  # or hasattr(func, '_hg_func_node_tag')
         self.params = None
 
         self._inspect_func()
@@ -546,14 +546,13 @@ class Lambda(Node):
 
 
 @export
-def func_node(f):
-    """
-    A decorator used to specify functions' options when they are used as node. For now there are not options
-    though.
-    :return:
-    """
-    f._hg_func_node_tag = True
-    return f
+def call(func, name=None):
+    return Lambda(func=func, name=name, map_arguments=True)
+
+
+@export
+def call1(func, name=None):
+    return Lambda(func=func, name=name, map_arguments=False)
 
 
 def multi_iterable_map(fn, iterable):
@@ -1170,7 +1169,7 @@ class Graph:
 
             return output
 
-    def __call__(self, input=None, outputs=None):
+    def __call__(self, input=None, *, outputs=None):
         """
         Runs the output nodes and their dependencies
         :param input:
