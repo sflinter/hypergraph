@@ -240,8 +240,3 @@ class GeneticBase:
         for key in gene_keys:
             individual[key] = phe[key].sample()
         return individual
-
-
-class GeneticAlgo(GeneticBase):
-    def __init__(self, graph: g.Graph):
-        super().__init__(graph)
