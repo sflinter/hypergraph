@@ -202,13 +202,16 @@ class GeneticBase:
         """
         self.phenotype = self.phenotype = graph.get_hpopt_config_ranges()
 
-    def create_population(self, size) -> list:
+    def create_population(self, size=None) -> list:
         """
         Create and return a population of individuals.
         :param size: The number of individuals in the population
         :return:
         """
-        return [dict([(k, d.sample()) for k, d in self.phenotype.items()]) for _ in range(size)]
+        sample_f = lambda: dict([(k, d.sample()) for k, d in self.phenotype.items()])
+        if size is None:
+            return sample_f()
+        return [sample_f() for _ in range(size)]
 
     def crossover(self, parents):
         """

@@ -206,11 +206,14 @@ class Node(ABC):
         """
         return get_key(key, _input=self)
 
-    def __lshift__(self, other): # TODO do the same with NodeId!!!
+    def __lshift__(self, other):    # TODO do the same with NodeId!!!
         if isinstance(other, Dependency):
             other.inject(self)
             return self
         return link(self, other)
+
+    def as_dict(self):  # TODO -> DictFlavor (when we'll switch to python 3.7)
+        return link(DictFlavor(), self)
 
     def serialize(self):
         """
@@ -223,6 +226,26 @@ class Node(ABC):
 class NonExecutable(Node):
     def __call__(self, input, hpopt_config={}):
         raise RuntimeError("This node is not supposed to be executed directly")
+
+
+class DictFlavor(Node):
+    """
+    A node which exposes a dict-like set of method. The input is checked to be an instance of dict.
+    """
+
+    def items(self):
+        return link(node(lambda d: list(d.items())), self)
+
+    def keys(self):
+        return link(node(lambda d: list(d.keys())), self)
+
+    def values(self):
+        return link(node(lambda d: list(d.values())), self)
+
+    def __call__(self, input, hpopt_config={}):
+        if not isinstance(input, dict):
+            raise ValueError()
+        return input
 
 
 class Identity(Node):
@@ -367,13 +390,21 @@ class GetKeys(Node):
             raise ValueError()
         self.keys = keys
         self.output_type = output_type
-        super(GetKeys, self).__init__(name)
+        super().__init__(name)
 
     @staticmethod
     def deserializer(keys, output_type=None):
         return GetKeys(name=None, keys=keys, output_type=output_type)
 
     def __call__(self, input, hpopt_config={}):
+        if self.keys is None:
+            # If no keys defined then act as an identity
+            # (it just checks whether the input is a dict in case that output_type == 'd')
+            if self.output_type == 'd':
+                if not isinstance(input, dict):
+                    raise ValueError()
+            return input
+
         if not isinstance(self.keys, list):
             return input[self.keys]
 
