@@ -200,7 +200,9 @@ class GeneticBase:
         Init the object.
         :param graph: The graph used to initialize the phenotype.
         """
-        self.phenotype = self.phenotype = graph.get_hpopt_config_ranges()
+        self.phenotype = graph.get_hpopt_config_ranges()
+        if len(self.phenotype.keys()) <= 2:
+            raise ValueError("Insufficient number of genes")
 
     def create_population(self, size=None) -> list:
         """
@@ -213,7 +215,7 @@ class GeneticBase:
             return sample_f()
         return [sample_f() for _ in range(size)]
 
-    def _select_genes(self, parents, selectors):
+    def _select_genes_from_parents(self, parents, selectors):
         return dict([(gene_key, parents[idx][gene_key]) for idx, gene_key in zip(selectors, self.phenotype.keys())])
 
     def crossover_uniform_multi_parents(self, parents) -> dict:
@@ -225,7 +227,8 @@ class GeneticBase:
         """
         if len(parents) < 2:
             raise ValueError("At least two parents are necessary to crossover")
-        return self._select_genes(parents, np.random.randint(low=0, high=len(parents), size=len(self.phenotype)))
+        return self._select_genes_from_parents(parents,
+                                               np.random.randint(low=0, high=len(parents), size=len(self.phenotype)))
 
     def crossover_uniform(self, parents):
         """
@@ -238,12 +241,32 @@ class GeneticBase:
             raise ValueError("Two parents are necessary to crossover")
         phe = self.phenotype
         selectors = np.random.randint(low=0, high=2, size=len(phe))
-        f = self._select_genes
+        f = self._select_genes_from_parents
         return [f(parents, selectors), f(parents, -selectors+1)]
 
-    # TODO k-point cross over
-    def crossover_kpoints(self, parents, k):
-        pass
+    @staticmethod
+    def _select_genes_by_name(source, keys):
+        return [(k, source[k]) for k in keys]
+
+    def crossover_1point(self, parents):
+        """
+        Given two parents, return two new individuals. These are the result of the 1-point
+        crossover between the parents' genes.
+        :param parents:
+        :return: A list with two individuals
+        """
+
+        # TODO k-point cross over
+        keys = list(self.phenotype.keys())
+        assert len(keys) > 2
+        k = np.random.randint(low=1, high=len(keys)-1)
+
+        keys = (keys[:k], keys[k:])
+        f = self._select_genes_by_name
+        return [
+            dict(f(parents[0], keys[0]) + f(parents[1], keys[1])),
+            dict(f(parents[1], keys[0]) + f(parents[0], keys[1]))
+        ]
 
     def mutations(self, individual, prob):
         """
