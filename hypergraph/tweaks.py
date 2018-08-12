@@ -213,21 +213,37 @@ class GeneticBase:
             return sample_f()
         return [sample_f() for _ in range(size)]
 
-    def crossover(self, parents):
+    def _select_genes(self, parents, selectors):
+        return dict([(gene_key, parents[idx][gene_key]) for idx, gene_key in zip(selectors, self.phenotype.keys())])
+
+    def crossover_uniform_multi_parents(self, parents) -> dict:
         """
         Given a number of individuals (considered parents), return a new individual which is the result of the
         crossover between the parents' genes.
         :param parents:
-        :return:
+        :return: The created individual
         """
         if len(parents) < 2:
             raise ValueError("At least two parents are necessary to crossover")
+        return self._select_genes(parents, np.random.randint(low=0, high=len(parents), size=len(self.phenotype)))
+
+    def crossover_uniform(self, parents):
+        """
+        Given two parents, return two new individuals. These are the result of the
+        crossover between the parents' genes.
+        :param parents:
+        :return: A list with two individuals
+        """
+        if len(parents) != 2:
+            raise ValueError("Two parents are necessary to crossover")
         phe = self.phenotype
-        selectors = np.random.randint(low=0, high=len(parents), size=len(phe))
-        child = {}
-        for idx, gene_key in zip(selectors, phe.keys()):
-            child[gene_key] = parents[idx][gene_key]
-        return child
+        selectors = np.random.randint(low=0, high=2, size=len(phe))
+        f = self._select_genes
+        return [f(parents, selectors), f(parents, -selectors+1)]
+
+    # TODO k-point cross over
+    def crossover_kpoints(self, parents, k):
+        pass
 
     def mutations(self, individual, prob):
         """
