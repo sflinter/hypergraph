@@ -6,15 +6,47 @@ from . import tweaks
 
 
 class Operators(ABC):
-    def get_ops(self):
-        # get all methods that starts with 'op_'
-        return list(map(partial(getattr, self), filter(lambda n: n.startswith('op_'), dir(self))))
+    def __init__(self):
+        self.runtime_ops = []
+
+    def _get_op_methods(self):
+        ops = map(partial(getattr, self), filter(lambda n: n.startswith('op_'), dir(self)))
+
+        def run_func_factory(f):
+            if hasattr(f, '_hg_cgp_func_factory'):
+                return f()
+            return f
+        return map(run_func_factory, ops)
+
+    def get_ops(self) -> list:
+        return list(self.runtime_ops) + list(self._get_op_methods())
+
+
+def unitary_adapter(func):
+    """
+    Adapt a unitary function to cgp function
+    :param func: A unitary function
+    :return: A new function which has the arguments: x, y, p. The argument x is used as input param.
+    """
+    return lambda x, y, p: func(x)
+
+
+def func_factory(f):
+    """
+    A decorator to mark functions factories.
+    :param f:
+    :return:
+    """
+    f._hg_cgp_func_factory = True
+    return f
 
 
 class TensorOperators(Operators):
     def __init__(self, default_shape=(3, ), invalid_value=.0):
+        # TODO default_axis
         self.default_shape = default_shape
         self.invalid_value = invalid_value
+        self.runtime_ops += list(map(unitary_adapter, [np.ceil, np.floor]))
 
     @staticmethod
     def op_identity(x, y, p):
@@ -24,24 +56,33 @@ class TensorOperators(Operators):
     def op_const(x, y, p):
         return p
 
-    def op_const_v(self, x, y, p):
-        v = np.empty(shape=self.default_shape)
-        v[:] = p
-        return v
+    @func_factory
+    def op_const_v(self):
+        def f(x, y, p):
+            v = np.empty(shape=self.default_shape)
+            v[:] = p
+            return v
+        return f
 
-    def op_head(self, x, y, p):
-        if isinstance(x, np.ndarray):
-            if np.size(x) == 0:
-                return self.invalid_value
-            return x[0]
-        return x
+    @func_factory
+    def op_head(self):
+        def f(x, y, p):
+            if isinstance(x, np.ndarray):
+                if np.size(x) == 0:
+                    return self.invalid_value
+                return x[0]
+            return x
+        return f
 
-    def op_last(self, x, y, p):
-        if isinstance(x, np.ndarray):
-            if np.size(x) == 0:
-                return self.invalid_value
-            return x[-1]
-        return x
+    @func_factory
+    def op_last(self):
+        def f(x, y, p):
+            if isinstance(x, np.ndarray):
+                if np.size(x) == 0:
+                    return self.invalid_value
+                return x[-1]
+            return x
+        return f
 
     @staticmethod
     def op_ravel(x, y, p):
