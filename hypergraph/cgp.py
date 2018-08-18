@@ -19,6 +19,7 @@ class Operators(ABC):
         return map(run_func_factory, ops)
 
     def get_ops(self) -> list:
+        # TODO apply run_func_factory to runtime_ops as well
         return list(self.runtime_ops) + list(self._get_op_methods())
 
 
@@ -42,10 +43,14 @@ def func_factory(f):
 
 
 class TensorOperators(Operators):
-    def __init__(self, default_shape=(3, ), invalid_value=.0):
-        # TODO default_axis
+    def __init__(self, default_shape=(3, ), invalid_value=.0, default_axis=-1):
+        if default_axis not in (0, -1):
+            raise ValueError()
+
         self.default_shape = default_shape
         self.invalid_value = invalid_value
+        self.default_axis = default_axis
+
         self.runtime_ops += list(map(unitary_adapter, [np.ceil, np.floor]))
 
     @staticmethod
@@ -110,17 +115,21 @@ class TensorOperators(Operators):
             return np.size(x)
         return 1
 
-    @staticmethod
-    def op_sum(x, y, p):
-        if isinstance(x, np.ndarray):
-            return x.sum(axis=-1)
-        return x
+    @func_factory
+    def op_sum(self):
+        def f(x, y, p):
+            if isinstance(x, np.ndarray):
+                return x.sum(axis=self.default_axis)
+            return x
+        return f
 
-    @staticmethod
-    def op_cumsum(x, y, p):
-        if isinstance(x, np.ndarray):
-            return x.cumsum(axis=-1)
-        return x
+    @func_factory
+    def op_cumsum(self):
+        def f(x, y, p):
+            if isinstance(x, np.ndarray):
+                return x.cumsum(axis=self.default_axis)
+            return x
+        return f
 
     # TODO cumprod?
 
@@ -141,7 +150,7 @@ class Cell(hgg.Node):
         }
 
     def __call__(self, input, hpopt_config={}):
-        x, y = input['x'], input['y']
+        x, y = input[:2]
 
         prefix = self.fully_qualified_name
         f = hpopt_config[prefix + '_f']

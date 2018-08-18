@@ -3,7 +3,7 @@ from . import graph as g
 from .utils import export
 import numpy as np
 import copy
-
+import math
 
 @export
 class Distribution(ABC):
@@ -26,11 +26,43 @@ class UniformChoice(Distribution):
     # TODO random subset and different probs for each value
 
     def __init__(self, values=[]):
-        self.gen = lambda: np.random.choice(values)
+        self.gen = lambda: np.random.choice(list(values))
         super().__init__(space_descriptor={'type': 'categorical', 'size': len(values)})
 
     def sample(self):
         return self.gen()
+
+
+@export
+class UniformPermutation(Distribution):
+    def __init__(self, values, k=None):
+        """
+        Random permutation of elements from parameter values into groups of size k.
+        :param values:
+        :param k: The number of elements of a permutation. If k is None the k is assumed len(values).
+        """
+
+        values = list(values)
+        n = len(values)
+        if k is None:
+            k = n
+        if not isinstance(k, int):
+            raise ValueError()
+        if k > n:
+            raise ValueError()
+
+        self.k = k
+        self.values = values
+        size = math.factorial(n) // math.factorial(n-k)
+        super().__init__(space_descriptor={'type': 'categorical', 'size': size})
+
+    def sample(self):
+        values = self.values
+        if self.k == len(values):
+            return list(np.random.permutation(values))
+
+        idxs = np.random.permutation(len(values))[:self.k]
+        return [values[idx] for idx in idxs]
 
 
 def _qround(n, q):
@@ -176,9 +208,49 @@ class Switch(g.Node):
         return input
 
 
+class Permutation(g.Node):
+    def __init__(self, size, name=None):
+        if size <= 0:
+            raise ValueError()
+
+        self.size = size
+        super().__init__(name)
+
+    def get_hpopt_config_ranges(self):
+        g = self.parent
+        assert g is not None
+        input_binding = g.get_node_input_binding(self)
+        if input_binding is None:
+            return {}
+
+        if isinstance(input_binding, dict):
+            return {self.fully_qualified_name: UniformPermutation(k=self.size, values=input_binding.keys())}
+
+        return {self.fully_qualified_name: UniformPermutation(k=self.size, values=range(len(input_binding)))}
+
+    def get_input_binding(self, hpopt_config={}):
+        selection = hpopt_config.get(self.fully_qualified_name)
+        if selection is None:
+            return None
+
+        g = self.parent
+        assert g is not None
+        input_binding = g.get_node_input_binding(self)
+        assert input_binding is not None
+        return [input_binding[key] for key in selection]
+
+    def __call__(self, input, hpopt_config={}):
+        # the selection is performed in the get_input_binding so here we simply return the input
+        return input
+
 @export
 def switch(default=None, name=None) -> g.Node:
     return Switch(name=name, default=default)
+
+
+@export
+def permutation(size, name=None) -> g.Node:
+    return Permutation(size=size, name=name)
 
 
 @export
