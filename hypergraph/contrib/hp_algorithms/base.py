@@ -20,9 +20,6 @@ class Search(Tuner):
         super().__init__(objective, **kwargs)
         self.objective = objective
 
-    def run(self):
-        pass
-
 
 class Bayesian(Tuner):
     pass
