@@ -157,3 +157,32 @@ class Cell(hgg.Node):
         p = hpopt_config[prefix + '_p']
 
         return f(x, y, p)
+
+
+class RegularGrid:
+    """
+    Regular grid pattern factory
+    """
+
+    def __init__(self, shape, operators: Operators):
+        shape = tuple(shape)
+        if len(shape) != 2:
+            raise ValueError()
+
+        self.shape = shape
+        self.operators = operators
+
+    def __call__(self):
+        grid = map(range, self.shape)
+        grid = np.meshgrid(*grid, indexing='ij')
+        grid = map(np.ravel, grid)
+        grid = np.stack(grid).T
+        for i, j in grid:
+            # TODO prefix to avoid names clashes
+            coords = str(i) + '_'+str(j)
+            cell_name = 'c_' + coords
+            perm_name = 'p_' + coords
+            Cell(operators=self.operators, name=cell_name) << tweaks.permutation(size=3, name=perm_name)
+
+        # TODO link(node_ref('p_...'), [node_ref('c_...'), ...])
+        # also connect inputs and outputs
