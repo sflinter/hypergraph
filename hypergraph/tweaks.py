@@ -209,8 +209,8 @@ class Switch(g.Node):
 
 
 class Permutation(g.Node):
-    def __init__(self, size, name=None):
-        if size <= 0:
+    def __init__(self, size=None, name=None):
+        if size is not None and size <= 0:
             raise ValueError()
 
         self.size = size
@@ -249,7 +249,7 @@ def switch(default=None, name=None) -> g.Node:
 
 
 @export
-def permutation(size, name=None) -> g.Node:
+def permutation(size=None, name=None) -> g.Node:
     return Permutation(size=size, name=name)
 
 
@@ -272,9 +272,11 @@ class GeneticBase:
         Init the object.
         :param graph: The graph used to initialize the phenotype.
         """
-        self.phenotype = graph.get_hpopt_config_ranges()
-        if len(self.phenotype.keys()) <= 2:
-            raise ValueError("Insufficient number of genes")
+        phenotype = graph.get_hpopt_config_ranges()
+        if len(phenotype.keys()) <= 2:
+            # raise ValueError("Insufficient number of genes")
+            phenotype['_internal_placeholder_77177ce9d789'] = Uniform()
+        self.phenotype = phenotype
 
     def create_population(self, size=None) -> list:
         """
