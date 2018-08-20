@@ -6,8 +6,18 @@ from . import tweaks
 
 
 class Operators(ABC):
-    def __init__(self):
+    def __init__(self, input_count=2):
+        if not isinstance(input_count, int):
+            raise ValueError()
+        if input_count < 1:
+            raise ValueError()
+
         self.runtime_ops = []
+        self._input_count = input_count
+
+    @property
+    def input_count(self):
+        return self._input_count
 
     def _get_op_methods(self):
         ops = map(partial(getattr, self), filter(lambda n: n.startswith('op_'), dir(self)))
@@ -132,6 +142,7 @@ class TensorOperators(Operators):
         return f
 
     # TODO cumprod?
+    # TODO more math ops
 
 
 class Cell(hgg.Node):
@@ -150,13 +161,14 @@ class Cell(hgg.Node):
         }
 
     def __call__(self, input, hpopt_config={}):
-        x, y = input[:2]
+        ops = self.operators
+        direct_inputs = input[:ops.input_count]
 
         prefix = self.fully_qualified_name
         f = hpopt_config[prefix + '_f']
         p = hpopt_config[prefix + '_p']
 
-        return f(x, y, p)
+        return f(*direct_inputs, p)
 
 
 class RegularGrid:
@@ -164,25 +176,45 @@ class RegularGrid:
     Regular grid pattern factory
     """
 
-    def __init__(self, shape, operators: Operators):
+    def __init__(self, shape, operators: Operators, name=None):
         shape = tuple(shape)
         if len(shape) != 2:
             raise ValueError()
 
+        # TODO validate params
+
         self.shape = shape
         self.operators = operators
+        self.name = name
+
+    @staticmethod
+    def _get_comp_name(comp, i, j):
+        """
+        Return the name to be associated to a node given the component name and the coordinates (i,j).
+        :param comp: The name of the component (eg. cell or permutation)
+        :param i:
+        :param j:
+        :return:
+        """
+        return comp + '_' + str(i) + '_' + str(j)
 
     def __call__(self):
+        ops = self.operators
+        cname = self._get_comp_name
+
         grid = map(range, self.shape)
         grid = np.meshgrid(*grid, indexing='ij')
         grid = map(np.ravel, grid)
-        grid = np.stack(grid).T
-        for i, j in grid:
-            # TODO prefix to avoid names clashes
-            coords = str(i) + '_'+str(j)
-            cell_name = 'c_' + coords
-            perm_name = 'p_' + coords
-            Cell(operators=self.operators, name=cell_name) << tweaks.permutation(size=3, name=perm_name)
+        grid = np.stack(grid).T     # grid: [[i1, j1], [i2, j2], ...]
 
-        # TODO link(node_ref('p_...'), [node_ref('c_...'), ...])
-        # also connect inputs and outputs
+        output = g.Graph(name=self.name)
+        with output.as_default():
+            for i, j in grid:
+                # TODO prefix to avoid names clashes
+                Cell(operators=ops,
+                     name=cname('c', i, j)) << tweaks.permutation(size=ops.input_count, name=cname('p', i, j))
+
+            # TODO link(node_ref('p_...'), [node_ref('c_...'), ...])
+            # also connect inputs and outputs
+
+        return output
