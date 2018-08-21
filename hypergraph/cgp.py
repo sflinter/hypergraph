@@ -3,6 +3,7 @@ from functools import partial
 from abc import ABC
 from . import graph as hgg
 from . import tweaks
+from .utils import StructFactory
 
 
 class Operators(ABC):
@@ -176,7 +177,8 @@ class RegularGrid:
     Regular grid pattern factory
     """
 
-    def __init__(self, input_range, shape, output_count, operators: Operators, backward_length=1, name=None):
+    def __init__(self, input_range, shape, output_struct_factory: StructFactory,
+                 operators: Operators, backward_length=1, name=None):
         # TODO output_count, pass struct factory
 
         if not isinstance(backward_length, int):
@@ -192,7 +194,7 @@ class RegularGrid:
 
         self.input_range = input_range
         self.shape = shape
-        self.output_count = output_count
+        self.output_struct_factory = output_struct_factory
         self.operators = operators
         self.backward_length = backward_length
         self.name = name
@@ -233,6 +235,7 @@ class RegularGrid:
         cname = self.get_comp_name
         shape = self.shape
         backward_length = self.backward_length
+        output_factory = self.output_struct_factory
 
         grid = self.get_grid_coords_list(map(range, shape))
         rows_range = range(shape[0])
@@ -255,7 +258,7 @@ class RegularGrid:
 
                 if j == shape[1]:
                     # connect outputs
-                    hgg.output() << [tweaks.switch() << connections for _ in range(self.output_count)]
+                    hgg.output() << output_factory([tweaks.switch() << connections for _ in range(len(output_factory))])
                 else:
                     for i in range(shape[0]):
                         hgg.link(hgg.node_ref(self.get_comp_name('p', i, j)), connections)
