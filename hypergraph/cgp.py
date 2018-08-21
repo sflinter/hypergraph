@@ -177,6 +177,8 @@ class RegularGrid:
     """
 
     def __init__(self, shape, operators: Operators, name=None):
+        # TODO input and output shape
+
         shape = tuple(shape)
         if len(shape) != 2:
             raise ValueError()
@@ -188,7 +190,7 @@ class RegularGrid:
         self.name = name
 
     @staticmethod
-    def _get_comp_name(comp, i, j):
+    def get_comp_name(comp, i, j):
         """
         Return the name to be associated to a node given the component name and the coordinates (i,j).
         :param comp: The name of the component (eg. cell or permutation)
@@ -200,7 +202,7 @@ class RegularGrid:
 
     def __call__(self):
         ops = self.operators
-        cname = self._get_comp_name
+        cname = self.get_comp_name
 
         grid = map(range, self.shape)
         grid = np.meshgrid(*grid, indexing='ij')
@@ -210,7 +212,6 @@ class RegularGrid:
         output = g.Graph(name=self.name)
         with output.as_default():
             for i, j in grid:
-                # TODO prefix to avoid names clashes
                 Cell(operators=ops,
                      name=cname('c', i, j)) << tweaks.permutation(size=ops.input_count, name=cname('p', i, j))
 
