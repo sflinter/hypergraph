@@ -189,25 +189,43 @@ class RegularGrid:
         self.operators = operators
         self.name = name
 
-    @staticmethod
-    def get_comp_name(comp, i, j):
+    @classmethod
+    def get_comp_name(cls, comp, i, j):
         """
         Return the name to be associated to a node given the component name and the coordinates (i,j).
+        If i and j are of type range then a list of components relative to the sub-grid is returned.
         :param comp: The name of the component (eg. cell or permutation)
         :param i:
         :param j:
         :return:
         """
+
+        def adapt_to_range(x):
+            if isinstance(x, range):
+                return x
+            return range(x, x + 1)
+
+        if isinstance(i, range) or isinstance(j, range):
+            i = adapt_to_range(i)
+            j = adapt_to_range(j)
+            coords = cls.get_grid_coords_list((i, j))
+            return [comp + '_' + str(i) + '_' + str(j) for i, j in coords]
+
         return comp + '_' + str(i) + '_' + str(j)
+
+    @staticmethod
+    def get_grid_coords_list(ranges):
+        grid = np.meshgrid(*ranges, indexing='ij')
+        grid = map(np.ravel, grid)
+        grid = np.stack(grid).T  # grid: [[i1, j1], [i2, j2], ...]
+        return grid
 
     def __call__(self):
         ops = self.operators
         cname = self.get_comp_name
+        shape = self.shape
 
-        grid = map(range, self.shape)
-        grid = np.meshgrid(*grid, indexing='ij')
-        grid = map(np.ravel, grid)
-        grid = np.stack(grid).T     # grid: [[i1, j1], [i2, j2], ...]
+        grid = self.get_grid_coords_list(map(range, shape))
 
         output = g.Graph(name=self.name)
         with output.as_default():
@@ -217,5 +235,8 @@ class RegularGrid:
 
             # TODO link(node_ref('p_...'), [node_ref('c_...'), ...])
             # also connect inputs and outputs
+
+        for j in range(shape[1]):
+            pass
 
         return output
