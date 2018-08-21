@@ -176,8 +176,13 @@ class RegularGrid:
     Regular grid pattern factory
     """
 
-    def __init__(self, shape, operators: Operators, name=None):
+    def __init__(self, shape, operators: Operators, backward_length=1, name=None):
         # TODO input and output shape
+
+        if not isinstance(backward_length, int):
+            raise ValueError()
+        if backward_length <= 0:
+            raise ValueError()
 
         shape = tuple(shape)
         if len(shape) != 2:
@@ -187,6 +192,7 @@ class RegularGrid:
 
         self.shape = shape
         self.operators = operators
+        self.backward_length = backward_length
         self.name = name
 
     @classmethod
@@ -224,8 +230,10 @@ class RegularGrid:
         ops = self.operators
         cname = self.get_comp_name
         shape = self.shape
+        backward_length = self.backward_length
 
         grid = self.get_grid_coords_list(map(range, shape))
+        rows_range = range(shape[0])
 
         output = g.Graph(name=self.name)
         with output.as_default():
@@ -237,6 +245,13 @@ class RegularGrid:
             # also connect inputs and outputs
 
         for j in range(shape[1]):
-            pass
+            j0 = j-backward_length
+            if j0 < 0:
+                # input layer link
+                # TODO
+                pass
+            j0 = max(j0, 0)
+
+            # TODO
 
         return output
