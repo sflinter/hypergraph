@@ -176,8 +176,8 @@ class RegularGrid:
     Regular grid pattern factory
     """
 
-    def __init__(self, shape, operators: Operators, backward_length=1, name=None):
-        # TODO input and output shape
+    def __init__(self, input_range, shape, output_count, operators: Operators, backward_length=1, name=None):
+        # TODO output_count, pass struct factory
 
         if not isinstance(backward_length, int):
             raise ValueError()
@@ -190,7 +190,9 @@ class RegularGrid:
 
         # TODO validate params
 
+        self.input_range = input_range
         self.shape = shape
+        self.output_count = output_count
         self.operators = operators
         self.backward_length = backward_length
         self.name = name
@@ -234,6 +236,7 @@ class RegularGrid:
 
         grid = self.get_grid_coords_list(map(range, shape))
         rows_range = range(shape[0])
+        inputs = [hgg.input_key(key=k) for k in self.input_range]
 
         output = g.Graph(name=self.name)
         with output.as_default():
@@ -241,17 +244,20 @@ class RegularGrid:
                 Cell(operators=ops,
                      name=cname('c', i, j)) << tweaks.permutation(size=ops.input_count, name=cname('p', i, j))
 
-            # TODO link(node_ref('p_...'), [node_ref('c_...'), ...])
-            # also connect inputs and outputs
+            for j in range(shape[1]+1):
+                j0 = j-backward_length
+                connections = []
+                if j0 < 0:
+                    # input layer link
+                    connections += inputs
+                j0 = max(j0, 0)
+                connections += map(hgg.node_ref, self.get_comp_name('c', rows_range, range(j0, max(0, j-1))))
 
-        for j in range(shape[1]):
-            j0 = j-backward_length
-            if j0 < 0:
-                # input layer link
-                # TODO
-                pass
-            j0 = max(j0, 0)
-
-            # TODO
+                if j == shape[1]:
+                    # connect outputs
+                    hgg.output() << [tweaks.switch() << connections for _ in range(self.output_count)]
+                else:
+                    for i in range(shape[0]):
+                        hgg.link(hgg.node_ref(self.get_comp_name('p', i, j)), connections)
 
         return output
