@@ -19,39 +19,53 @@ def export(f):
 
 
 class StructFactory:
-    @abc.abstractmethod
-    def __call__(self, values):
-        pass
+    """
+    Generic struct factory given a list of values (iterable)
+    """
+
+    def __init__(self, input_size=None):
+        if not isinstance(input_size, (int, None)):
+            raise ValueError()
+        if input_size < 0:
+            raise ValueError()
+        self._input_size = input_size
+
+    @property
+    def input_size(self):
+        """
+        The number of required values or None if the factory supports any number of them.
+        :return:
+        """
+        return self._input_size
 
     @abc.abstractmethod
-    def __len__(self):
+    def __call__(self, values):
         pass
 
 
 class SequentialDictFactory(StructFactory):
     def __init__(self, keys):
         self.keys = list(keys)
+        super().__init__(len(keys))
 
     def __call__(self, values):
         return dict([(k, v) for k, v in zip(self.keys, values)])
 
-    def __len__(self):
-        return len(self.keys)
-
 
 class ListFactory(StructFactory):
     def __init__(self, size=None):
-        # TODO validate size
-        self.size = size
+        super().__init__(input_size=size)
 
     def __call__(self, values):
-        size = self.size
+        size = self.input_size
         if size is not None:
             return list(values[:size])
         return list(values)
 
-    def __len__(self):
-        sz = self.size
-        if sz is not None:
-            return sz
-        raise TypeError()
+
+class SingleValueStructFactory(StructFactory):
+    def __init__(self):
+        super().__init__(input_size=1)
+
+    def __call__(self, values):
+        return values[0]
