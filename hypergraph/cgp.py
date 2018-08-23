@@ -7,7 +7,7 @@ from .utils import StructFactory
 
 
 class Operators(ABC):
-    def __init__(self, input_count=2):
+    def __init__(self, default_value=0.0, input_count=2):
         if not isinstance(input_count, int):
             raise ValueError()
         if input_count < 1:
@@ -15,6 +15,7 @@ class Operators(ABC):
 
         self.runtime_ops = []
         self._input_count = input_count
+        self.default_value = default_value
 
     @property
     def input_count(self):
@@ -25,6 +26,7 @@ class Operators(ABC):
 
         def run_func_factory(f):
             if hasattr(f, '_hg_cgp_func_factory'):
+                # TODO check for multi
                 return f()
             return f
         return map(run_func_factory, ops)
@@ -45,24 +47,35 @@ def unitary_adapter(func):
 
 def func_factory(f):
     """
+    A decorator to mark a function factory.
+    :param f:
+    :return:
+    """
+    f._hg_cgp_func_factory = func_factory
+    return f
+
+
+def multi_func_factory(f):
+    """
     A decorator to mark functions factories.
     :param f:
     :return:
     """
-    f._hg_cgp_func_factory = True
+    f._hg_cgp_func_factory = multi_func_factory
     return f
 
 
 class TensorOperators(Operators):
-    def __init__(self, default_shape=(3, ), invalid_value=.0, default_axis=-1):
+    def __init__(self, default_shape=(3, ), default_axis=-1):
         if default_axis not in (0, -1):
             raise ValueError()
 
         self.default_shape = default_shape
-        self.invalid_value = invalid_value
         self.default_axis = default_axis
 
-        self.runtime_ops += list(map(unitary_adapter, [np.ceil, np.floor]))
+        # TODO remove, use multi_func_factory
+        self.runtime_ops += list(map(unitary_adapter, [np.ceil, np.floor, np.abs, np.exp, np.sin, np.cos]))
+        #TODO sqrt, pow, pow_int, tan, tanh
 
     @staticmethod
     def op_identity(x, y, p):
@@ -81,11 +94,19 @@ class TensorOperators(Operators):
         return f
 
     @func_factory
+    def op_empty_v(self):
+        def f(x, y, p):
+            v = np.empty(shape=self.default_shape)
+            v[:] = self.default_value
+            return v
+        return f
+
+    @func_factory
     def op_head(self):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
                 if np.size(x) == 0:
-                    return self.invalid_value
+                    return self.default_value
                 return x[0]
             return x
         return f
@@ -95,7 +116,7 @@ class TensorOperators(Operators):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
                 if np.size(x) == 0:
-                    return self.invalid_value
+                    return self.default_value
                 return x[-1]
             return x
         return f
@@ -114,17 +135,21 @@ class TensorOperators(Operators):
 
     # TODO sort or argsort? argmin and argmax?
 
-    @staticmethod
-    def op_shape(x, y, p):
-        if isinstance(x, np.ndarray):
-            return np.array(x.shape)    # TODO set dtype?
-        return tuple()
+    @func_factory
+    def op_shape(self):
+        def f(x, y, p):
+            if isinstance(x, np.ndarray):
+                return np.array(x.shape)    # TODO set dtype?
+            return self.default_value
+        return f
 
-    @staticmethod
-    def op_size(x, y, p):
-        if isinstance(x, np.ndarray):
-            return np.size(x)
-        return 1
+    @func_factory
+    def op_size(self):
+        def f(x, y, p):
+            if isinstance(x, np.ndarray):
+                return np.size(x)
+            return self.default_value
+        return f
 
     @func_factory
     def op_sum(self):
@@ -146,6 +171,24 @@ class TensorOperators(Operators):
     # TODO more math ops
 
 
+class StochasticOperators(Operators):
+    @staticmethod
+    def op_sample_uniform(x, y, p):
+        return np.random.uniform() * p  # TODO better scaling
+
+    @staticmethod
+    def op_sample_normal(x, y, p):
+        return np.random.normal() * p   # TODO better scaling
+
+    @func_factory
+    def op_sample_poisson(self):
+        def f(x, y, p):
+            if p == 0.0:
+                return self.default_value
+            return np.random.poisson(1.0/p)
+        return f
+
+
 class Cell(hgg.Node):
     def __init__(self, operators: Operators, name=None):
         if not isinstance(operators, Operators):
@@ -158,7 +201,7 @@ class Cell(hgg.Node):
 
         return {
             prefix + '_f': tweaks.UniformChoice(values=self.operators.get_ops()),
-            prefix + '_p': tweaks.Uniform()
+            prefix + '_p': tweaks.Uniform() # TODO get distribution from operators
         }
 
     def __call__(self, input, hpopt_config={}):
@@ -179,6 +222,15 @@ class RegularGrid:
 
     def __init__(self, input_range, shape, output_factory: StructFactory,
                  operators: Operators, backward_length=1, name=None):
+        """
+        Init the network factory
+        :param input_range:
+        :param shape:
+        :param output_factory:
+        :param operators:
+        :param backward_length:
+        :param name: The name associated to the returned graph
+        """
         if not isinstance(backward_length, int):
             raise ValueError()
         if backward_length <= 0:
@@ -223,10 +275,22 @@ class RegularGrid:
 
     @staticmethod
     def get_grid_coords_list(ranges):
+        """
+        Given a list of ranges return a list of coordinates for the mesh identified by the ranges.
+        The coordinates are of the form: [[i1, j1], [i2, j2], ...]
+        :param ranges:
+        :return:
+        """
         grid = np.meshgrid(*ranges, indexing='ij')
         grid = map(np.ravel, grid)
         grid = np.stack(grid).T  # grid: [[i1, j1], [i2, j2], ...]
         return grid
+
+    def create_inputs(self):
+        if self.input_range is not None:
+            # TODO + [hgg.input_all()]? (if possible)
+            return [hgg.input_key(key=k) for k in self.input_range]
+        return [hgg.input_all()]
 
     def __call__(self):
         ops = self.operators
@@ -240,11 +304,7 @@ class RegularGrid:
 
         output = g.Graph(name=self.name)
         with output.as_default():
-            # create inputs
-            if self.input_range is not None:
-                inputs = [hgg.input_key(key=k) for k in self.input_range]  # TODO + [hgg.input_all()]? (if possible)
-            else:
-                inputs = [hgg.input_all()]
+            inputs = self.create_inputs()
 
             # iterate through the grid
             for i, j in grid:
