@@ -1,5 +1,6 @@
 import numpy as np
 from functools import partial
+import itertools
 from abc import ABC
 from . import graph as hgg
 from . import tweaks
@@ -13,7 +14,6 @@ class Operators(ABC):
         if input_count < 1:
             raise ValueError()
 
-        self.runtime_ops = []
         self._input_count = input_count
         self.default_value = default_value
 
@@ -21,22 +21,25 @@ class Operators(ABC):
     def input_count(self):
         return self._input_count
 
-    def _get_op_methods(self):
-        ops = map(partial(getattr, self), filter(lambda n: n.startswith('op_'), dir(self)))
+    def get_ops(self):
+        ops = filter(lambda f: hasattr(f, '_hg_cgp_func_factory'), self.__dict__.values())
 
         def run_func_factory(f):
-            if hasattr(f, '_hg_cgp_func_factory'):
-                # TODO check for multi
-                return f()
-            return f
-        return map(run_func_factory, ops)
+            # TODO are method invoked correctly?
+            
+            desc = f._hg_cgp_func_factory
+            if desc.multi:
+                if desc.factory:
+                    fs = f()
+                    return [f() for f in fs]
+                return f()  # TODO check returned value is iterable
+            if desc.factory:
+                return [f()]
+            return [f]
+        return itertools.chain.from_iterable(map(run_func_factory, ops))
 
-    def get_ops(self) -> list:
-        # TODO apply run_func_factory to runtime_ops as well
-        return list(self.runtime_ops) + list(self._get_op_methods())
 
-
-def unitary_adapter(func):
+def unitary_adapter(func):  # TODO is unary or unitary?
     """
     Adapt a unitary function to cgp function
     :param func: A unitary function
@@ -45,24 +48,24 @@ def unitary_adapter(func):
     return lambda x, y, p: func(x)
 
 
-def func_factory(f):
+class FuncMark:
     """
-    A decorator to mark a function factory.
-    :param f:
-    :return:
+    A decorator to mark a function factory for the CGP' node.
     """
-    f._hg_cgp_func_factory = func_factory
-    return f
 
+    def __init__(self, factory: bool=False, multi: bool=False):
+        """
+        Init func factory
+        :param factory: boolean, when true the function is a factory
+        :param multi: boolean, when true the function is expected to return a list of function factories.
+        """
+        self.factory = factory
+        self.multi = multi
 
-def multi_func_factory(f):
-    """
-    A decorator to mark functions factories.
-    :param f:
-    :return:
-    """
-    f._hg_cgp_func_factory = multi_func_factory
-    return f
+    def __call__(self, f):
+        # TODO add f to a list?
+        f._hg_cgp_func_factory = self
+        return f
 
 
 class TensorOperators(Operators):
@@ -73,19 +76,24 @@ class TensorOperators(Operators):
         self.default_shape = default_shape
         self.default_axis = default_axis
 
-        # TODO remove, use multi_func_factory
-        self.runtime_ops += list(map(unitary_adapter, [np.ceil, np.floor, np.abs, np.exp, np.sin, np.cos]))
         #TODO sqrt, pow, pow_int, tan, tanh
 
     @staticmethod
+    @FuncMark(factory=False, multi=True)
+    def op_math_unary():
+        return map(unitary_adapter, [np.ceil, np.floor, np.abs, np.exp, np.sin, np.cos])
+
+    @staticmethod
+    @FuncMark()
     def op_identity(x, y, p):
         return x
 
     @staticmethod
+    @FuncMark()
     def op_const(x, y, p):
         return p
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_const_v(self):
         def f(x, y, p):
             v = np.empty(shape=self.default_shape)
@@ -93,7 +101,7 @@ class TensorOperators(Operators):
             return v
         return f
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_empty_v(self):
         def f(x, y, p):
             v = np.empty(shape=self.default_shape)
@@ -101,7 +109,7 @@ class TensorOperators(Operators):
             return v
         return f
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_head(self):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
@@ -111,7 +119,7 @@ class TensorOperators(Operators):
             return x
         return f
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_last(self):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
@@ -122,12 +130,14 @@ class TensorOperators(Operators):
         return f
 
     @staticmethod
+    @FuncMark()
     def op_ravel(x, y, p):
         if isinstance(x, np.ndarray):
             return np.ravel(x)
         return x
 
     @staticmethod
+    @FuncMark()
     def op_transpose(x, y, p):
         if isinstance(x, np.ndarray):
             return np.transpose(x)
@@ -135,7 +145,7 @@ class TensorOperators(Operators):
 
     # TODO sort or argsort? argmin and argmax?
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_shape(self):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
@@ -143,7 +153,7 @@ class TensorOperators(Operators):
             return self.default_value
         return f
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_size(self):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
@@ -151,7 +161,7 @@ class TensorOperators(Operators):
             return self.default_value
         return f
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_sum(self):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
@@ -159,7 +169,7 @@ class TensorOperators(Operators):
             return x
         return f
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_cumsum(self):
         def f(x, y, p):
             if isinstance(x, np.ndarray):
@@ -173,14 +183,16 @@ class TensorOperators(Operators):
 
 class StochasticOperators(Operators):
     @staticmethod
+    @FuncMark()
     def op_sample_uniform(x, y, p):
         return np.random.uniform() * p  # TODO better scaling
 
     @staticmethod
+    @FuncMark()
     def op_sample_normal(x, y, p):
         return np.random.normal() * p   # TODO better scaling
 
-    @func_factory
+    @FuncMark(factory=True)
     def op_sample_poisson(self):
         def f(x, y, p):
             if p == 0.0:
@@ -201,7 +213,7 @@ class Cell(hgg.Node):
 
         return {
             prefix + '_f': tweaks.UniformChoice(values=self.operators.get_ops()),
-            prefix + '_p': tweaks.Uniform() # TODO get distribution from operators
+            prefix + '_p': tweaks.Uniform()     # TODO get distribution from operators
         }
 
     def __call__(self, input, hpopt_config={}):
