@@ -25,8 +25,8 @@ class Operators(ABC):
         ops = filter(lambda f: hasattr(f, '_hg_cgp_func_factory'), self.__dict__.values())
 
         def run_func_factory(f):
-            # TODO are method invoked correctly?
-            
+            # TODO are methods invoked correctly?
+
             desc = f._hg_cgp_func_factory
             if desc.multi:
                 if desc.factory:
@@ -39,13 +39,14 @@ class Operators(ABC):
         return itertools.chain.from_iterable(map(run_func_factory, ops))
 
 
-def unitary_adapter(func):  # TODO is unary or unitary?
+def unary_adapter(func, activation=lambda a: a):
     """
-    Adapt a unitary function to cgp function
-    :param func: A unitary function
+    Adapt a unary function to cgp function
+    :param func: A unary function
+    :param activation: The function to be applied to the output
     :return: A new function which has the arguments: x, y, p. The argument x is used as input param.
     """
-    return lambda x, y, p: func(x)
+    return lambda x, y, p: activation(func(x))
 
 
 class FuncMark:
@@ -76,68 +77,75 @@ class TensorOperators(Operators):
         self.default_shape = default_shape
         self.default_axis = default_axis
 
-        #TODO sqrt, pow, pow_int, tan, tanh
+        if not (-1. <= self.default_value <= 1.):
+            raise ValueError()
+
+        # TODO pow, pow_int, tan?
+        # TODO remove sqrt and add pow only?
+
+    @FuncMark(multi=True)
+    def op_simple_math_unary(self):
+        return map(partial(unary_adapter, activation=self.activation),
+                   [np.ceil, np.floor, np.abs, np.exp, np.sin, np.cos, np.tanh, np.arctanh, np.sqrt])
+
+    def activation(self, v):
+        v = np.array(v)
+        isscalar = (v.ndim == 0)
+        v = v[None] if isscalar else v
+
+        np.copyto(v, 1, where=np.isposinf(v) or np.greater(v, 1))
+        np.copyto(v, -1, where=np.isneginf(v) or np.less(v, -1))
+        np.copyto(v, self.default_value, where=np.isnan(v))
+
+        return v[0] if isscalar else v
 
     @staticmethod
-    @FuncMark(factory=False, multi=True)
-    def op_math_unary():
-        return map(unitary_adapter, [np.ceil, np.floor, np.abs, np.exp, np.sin, np.cos])
-
-    @staticmethod
-    @FuncMark()
+    @FuncMark
     def op_identity(x, y, p):
         return x
 
     @staticmethod
-    @FuncMark()
+    @FuncMark
     def op_const(x, y, p):
         return p
 
-    @FuncMark(factory=True)
-    def op_const_v(self):
-        def f(x, y, p):
-            v = np.empty(shape=self.default_shape)
-            v[:] = p
-            return v
-        return f
+    @FuncMark
+    def op_const_v(self, x, y, p):
+        v = np.empty(shape=self.default_shape)
+        v[:] = p
+        return v
 
-    @FuncMark(factory=True)
-    def op_empty_v(self):
-        def f(x, y, p):
-            v = np.empty(shape=self.default_shape)
-            v[:] = self.default_value
-            return v
-        return f
+    @FuncMark
+    def op_empty_v(self, x, y, p):
+        v = np.empty(shape=self.default_shape)
+        v[:] = self.default_value
+        return v
 
-    @FuncMark(factory=True)
-    def op_head(self):
-        def f(x, y, p):
-            if isinstance(x, np.ndarray):
-                if np.size(x) == 0:
-                    return self.default_value
-                return x[0]
-            return x
-        return f
+    @FuncMark
+    def op_head(self, x, y, p):
+        if isinstance(x, np.ndarray):
+            if np.size(x) == 0:
+                return self.default_value
+            return x[0]
+        return x
 
-    @FuncMark(factory=True)
-    def op_last(self):
-        def f(x, y, p):
-            if isinstance(x, np.ndarray):
-                if np.size(x) == 0:
-                    return self.default_value
-                return x[-1]
-            return x
-        return f
+    @FuncMark
+    def op_last(self, x, y, p):
+        if isinstance(x, np.ndarray):
+            if np.size(x) == 0:
+                return self.default_value
+            return x[-1]
+        return x
 
     @staticmethod
-    @FuncMark()
+    @FuncMark
     def op_ravel(x, y, p):
         if isinstance(x, np.ndarray):
             return np.ravel(x)
         return x
 
     @staticmethod
-    @FuncMark()
+    @FuncMark
     def op_transpose(x, y, p):
         if isinstance(x, np.ndarray):
             return np.transpose(x)
@@ -145,37 +153,29 @@ class TensorOperators(Operators):
 
     # TODO sort or argsort? argmin and argmax?
 
-    @FuncMark(factory=True)
-    def op_shape(self):
-        def f(x, y, p):
-            if isinstance(x, np.ndarray):
-                return np.array(x.shape)    # TODO set dtype?
-            return self.default_value
-        return f
+    #@FuncMark
+    #def op_shape(self, x, y, p):
+    #    if isinstance(x, np.ndarray):
+    #        return np.array(x.shape)    # TODO set dtype?
+    #    return self.default_value
 
-    @FuncMark(factory=True)
-    def op_size(self):
-        def f(x, y, p):
-            if isinstance(x, np.ndarray):
-                return np.size(x)
-            return self.default_value
-        return f
+    #@FuncMark
+    #def op_size(self, x, y, p):
+    #    if isinstance(x, np.ndarray):
+    #        return np.size(x)
+    #    return self.default_value
 
-    @FuncMark(factory=True)
-    def op_sum(self):
-        def f(x, y, p):
-            if isinstance(x, np.ndarray):
-                return x.sum(axis=self.default_axis)
-            return x
-        return f
+    @FuncMark
+    def op_sum(self, x, y, p):
+        if isinstance(x, np.ndarray):
+            return self.activation(x.sum(axis=self.default_axis))
+        return x
 
-    @FuncMark(factory=True)
-    def op_cumsum(self):
-        def f(x, y, p):
-            if isinstance(x, np.ndarray):
-                return x.cumsum(axis=self.default_axis)
-            return x
-        return f
+    @FuncMark
+    def op_cumsum(self, x, y, p):
+        if isinstance(x, np.ndarray):
+            return self.activation(x.cumsum(axis=self.default_axis))
+        return x
 
     # TODO cumprod?
     # TODO more math ops
@@ -183,22 +183,20 @@ class TensorOperators(Operators):
 
 class StochasticOperators(Operators):
     @staticmethod
-    @FuncMark()
+    @FuncMark
     def op_sample_uniform(x, y, p):
         return np.random.uniform() * p  # TODO better scaling
 
     @staticmethod
-    @FuncMark()
+    @FuncMark
     def op_sample_normal(x, y, p):
         return np.random.normal() * p   # TODO better scaling
 
-    @FuncMark(factory=True)
-    def op_sample_poisson(self):
-        def f(x, y, p):
-            if p == 0.0:
-                return self.default_value
-            return np.random.poisson(1.0/p)
-        return f
+    @FuncMark
+    def op_sample_poisson(self, x, y, p):
+        if p == 0.0:
+            return self.default_value
+        return np.random.poisson(1.0/p)
 
 
 class Cell(hgg.Node):
@@ -213,7 +211,7 @@ class Cell(hgg.Node):
 
         return {
             prefix + '_f': tweaks.UniformChoice(values=self.operators.get_ops()),
-            prefix + '_p': tweaks.Uniform()     # TODO get distribution from operators
+            prefix + '_p': tweaks.Uniform(low=-1.0, high=1.0)     # TODO get distribution from operators
         }
 
     def __call__(self, input, hpopt_config={}):
