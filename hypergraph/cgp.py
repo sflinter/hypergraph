@@ -9,43 +9,58 @@ from .utils import StructFactory
 
 
 class Operators(ABC):
-    def __init__(self, default_value=0.0, input_count=2):
+    def __init__(self, input_count=2):
         if not isinstance(input_count, int):
             raise ValueError()
         if input_count < 1:
             raise ValueError()
 
         self._input_count = input_count
-        self.default_value = default_value
+        self.include = None
+        self.exclude = None
 
     @property
     def input_count(self):
         return self._input_count
 
+    def set_selection(self, include=None, exclude=None):
+        self.include = include
+        self.exclude = exclude
+
     def get_ops(self):
-        ops = filter(lambda f: hasattr(f, '_hg_cgp_func_factory'), self.__dict__.values())
+        """
+        Get a list of operators. The operators are methods which name starts with 'op_'. The optional
+        decorator FuncMark can be used to specify additional features.
+        :return:
+        """
+        ops = filter(lambda n: n.startswith('op_'), dir(self))
+        ops = map(lambda n: getattr(self, n), ops)
 
         def run_func_factory(f):
-            # TODO are methods invoked correctly?
-
-            desc = f._hg_cgp_func_factory
-            if desc.factory:
-                ret = f()
-                if isinstance(ret, collections.Iterable):
-                    return ret
-                return [ret]
+            if hasattr(f, '_hg_cgp_func_mark'):
+                desc = f._hg_cgp_func_mark
+                if desc.factory:
+                    ret = f()
+                    if isinstance(ret, collections.Iterable):
+                        return ret
+                    return [ret]
             return [f]
+
+        def check_inc(f, *, include):
+            if f.__name__ in include:
+                return True
+            if hasattr(f, '_hg_cgp_func_mark'):
+                return f._hg_cgp_func_mark.group in include
+            return False
+
+        include = self.include
+        exclude = self.exclude
+        if include is not None:
+            ops = filter(partial(check_inc, include=include), ops)
+        if exclude is not None:
+            ops = filter(lambda f: not check_inc(f, include=exclude), ops)
+
         return itertools.chain.from_iterable(map(run_func_factory, ops))
-
-
-def unary_adapter(func, activation=lambda a: a):
-    """
-    Adapt a unary function to cgp function
-    :param func: A unary function
-    :param activation: The function to be applied to the output
-    :return: A new function which has the arguments: x, y, p. The argument x is used as input param.
-    """
-    return lambda x, y, p: activation(func(x))
 
 
 class FuncMark:
@@ -53,39 +68,29 @@ class FuncMark:
     A decorator to mark a function factory for the CGP' node.
     """
 
-    def __init__(self, factory: bool=False):
+    def __init__(self, group: str=None, *, factory: bool=False):
         """
         Init func factory
         :param factory: boolean, when true the function is an operator factory that returns an operator or a list of them.
         """
         self.factory = factory
+        self.group = group
 
     def __call__(self, f):
-        # TODO add f to a list?
-        f._hg_cgp_func_factory = self
+        f._hg_cgp_func_mark = self
         return f
 
 
 class TensorOperators(Operators):
-    def __init__(self, default_shape=(3, ), default_axis=-1):
+    def __init__(self, default_axis=-1):
         if default_axis not in (0, -1):
             raise ValueError()
-
-        self.default_shape = default_shape
         self.default_axis = default_axis
 
-        if not (-1. <= self.default_value <= 1.):
-            raise ValueError()
+    # TODO func to check op codomain function
 
-        # TODO pow, pow_int, tan?
-        # TODO remove sqrt and add pow only?
-
-    @FuncMark(multi=True)
-    def op_simple_math_unary(self):
-        return map(partial(unary_adapter, activation=self.activation),
-                   [np.ceil, np.floor, np.exp, np.sin, np.cos, np.tanh, np.arctanh, np.sqrt])
-
-    def activation(self, v):
+    @staticmethod
+    def clip(v):
         v = np.array(v)
         isscalar = (v.ndim == 0)
         v = v[None] if isscalar else v
@@ -93,57 +98,74 @@ class TensorOperators(Operators):
         # clip values to [-1, 1]
         np.copyto(v, 1, where=np.isposinf(v) or np.greater(v, 1))
         np.copyto(v, -1, where=np.isneginf(v) or np.less(v, -1))
-        np.copyto(v, self.default_value, where=np.isnan(v))
+        np.copyto(v, 0, where=np.isnan(v))
 
         return v[0] if isscalar else v
 
     @staticmethod
-    @FuncMark
+    def tensor_shape(v):
+        v = np.shape(v)
+        return None if v == () else v
+
+    @staticmethod
+    @FuncMark('base')
     def op_identity(x, y, p):
         return x
 
     @staticmethod
-    @FuncMark
+    @FuncMark('base')
+    def op_ywire(x, y, p):
+        return y
+
+    @staticmethod
+    @FuncMark('base')
     def op_const(x, y, p):
         return p
 
-    @FuncMark
-    def op_const_v(self, x, y, p):
-        v = np.empty(shape=self.default_shape)
+    @staticmethod
+    @FuncMark('base')
+    def op_const_v(x, y, p):
+        v = np.empty_like(x)
         v.fill(p)
         return v
 
-    @FuncMark
-    def op_empty_v(self, x, y, p):
-        v = np.empty(shape=self.default_shape)
-        v.fill(self.default_value)
+    @FuncMark('base')
+    def op_zeros(self, x, y, p):
+        v = np.empty_like(x)
+        v.fill(0.)
         return v
 
-    @FuncMark
+    @FuncMark('base')
+    def op_ones(self, x, y, p):
+        v = np.empty_like(x)
+        v.fill(1.)
+        return v
+
+    @FuncMark('base')
     def op_head(self, x, y, p):
         if isinstance(x, np.ndarray):
             if np.size(x) == 0:
-                return self.default_value
+                return 0.
             return x[0]
         return x
 
-    @FuncMark
+    @FuncMark('base')
     def op_last(self, x, y, p):
         if isinstance(x, np.ndarray):
             if np.size(x) == 0:
-                return self.default_value
+                return 0.
             return x[-1]
         return x
 
     @staticmethod
-    @FuncMark
+    @FuncMark('base')
     def op_ravel(x, y, p):
         if isinstance(x, np.ndarray):
             return np.ravel(x)
         return x
 
     @staticmethod
-    @FuncMark
+    @FuncMark('base')
     def op_transpose(x, y, p):
         if isinstance(x, np.ndarray):
             return np.transpose(x)
@@ -174,76 +196,167 @@ class TensorOperators(Operators):
             return op(x, y)
         return f
 
-    @FuncMark(factory=True)
-    def op_add(self):
-        return self.binary_op_factory(lambda x, y: (x + y)/2.0)
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_add(cls):
+        return cls.binary_op_factory(lambda x, y: (x + y)/2.0)
 
-    @FuncMark(factory=True)
-    def op_aminus(self):
-        return self.binary_op_factory(lambda x, y: np.abs(x - y))
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_aminus(cls):
+        return cls.binary_op_factory(lambda x, y: np.abs(x - y))
 
-    @FuncMark(factory=True)
-    def op_mul(self):
-        return self.binary_op_factory(lambda x, y: x * y)
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_mul(cls):
+        return cls.binary_op_factory(lambda x, y: x * y)
 
-    @FuncMark(factory=True)
-    def op_max2(self):
-        return self.binary_op_factory(lambda x, y: np.maximum(x, y))
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_max2(cls):
+        return cls.binary_op_factory(lambda x, y: np.maximum(x, y))
 
-    @FuncMark(factory=True)
-    def op_min2(self):
-        return self.binary_op_factory(lambda x, y: np.minimum(x, y))
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_min2(cls):
+        return cls.binary_op_factory(lambda x, y: np.minimum(x, y))
 
-    @FuncMark(factory=True)
-    def op_sqrtxy(self):
-        return self.binary_op_factory(lambda x, y: np.sqrt(np.square(x)+np.square(y))/np.sqrt(2.))
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_lt(cls):
+        return cls.binary_op_factory(lambda x, y: (np.less(x, y)).astype(dtype=np.float))
 
-    @FuncMark
-    def op_cmul(self, x, y, p):
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_gt(cls):
+        return cls.binary_op_factory(lambda x, y: (np.greater(x, y)).astype(dtype=np.float))
+
+    @staticmethod
+    @FuncMark('math')
+    def op_max1(x, y, p):
+        return np.max(x)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_min1(x, y, p):
+        return np.min(x)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_round(x, y, p):
+        return np.round(x)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_ceil(x, y, p):
+        return np.ceil(x)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_floor(x, y, p):
+        return np.floor(x)
+
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_sqrtxy(cls):
+        return cls.binary_op_factory(lambda x, y: np.sqrt(np.square(x)+np.square(y))/np.sqrt(2.))
+
+    @staticmethod
+    @FuncMark('math')
+    def op_sqrt(x, y, p):
+        return np.sqrt(np.abs(x))
+
+    @staticmethod
+    @FuncMark('math')
+    def op_cpow(x, y, p):
+        return np.power(np.abs(x), p + 1)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_ypow(x, y, p):
+        return np.power(np.abs(x), np.abs(y))
+
+    @staticmethod
+    @FuncMark('math')
+    def op_expx(x, y, p):
+        return (np.exp(x)-1.)/(np.e-1.)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_sinx(x, y, p):
+        return np.sin(x*np.pi/2.)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_acos(x, y, p):
+        return np.arccos(x)/np.pi
+
+    @staticmethod
+    @FuncMark('math')
+    def op_asin(x, y, p):
+        return np.arcsin(x)*(2./np.pi)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_atan(x, y, p):
+        return np.arcsin(x)*(4./np.pi)
+
+    @staticmethod
+    @FuncMark('math')
+    def op_cmul(x, y, p):
         return x*p
 
-    @FuncMark
-    def op_abs(self, x, y, p):
+    @staticmethod
+    @FuncMark('math')
+    def op_abs(x, y, p):
         return np.abs(x)
 
-    @FuncMark
+    @FuncMark('math')
     def op_sum(self, x, y, p):
         if isinstance(x, np.ndarray):
-            return self.activation(x.sum(axis=self.default_axis))
+            return self.clip(x.sum(axis=self.default_axis))
         return x
 
-    @FuncMark
+    @FuncMark('math')
     def op_cumsum(self, x, y, p):
         if isinstance(x, np.ndarray):
-            return self.activation(x.cumsum(axis=self.default_axis))
+            return self.clip(x.cumsum(axis=self.default_axis))
         return x
 
-    @FuncMark
+    @FuncMark('math')
     def op_cumprod(self, x, y, p):
-        if isinstance(x, np.ndarray):
-            return self.activation(x.cumprod(axis=self.default_axis))
-        return x
-
-
-class StochasticOperators(Operators):
-    clip = partial(np.clip, a_min=-1, a_max=1)
+        return x.cumprod(axis=self.default_axis)
 
     @classmethod
-    @FuncMark
+    @FuncMark('stochastic')
     def op_sample_uniform(cls, x, y, p):
-        return np.random.uniform(low=-1, high=1)
+        return np.random.uniform(low=-1, high=1, size=cls.tensor_shape(x))
 
     @classmethod
-    @FuncMark
+    @FuncMark('stochastic')
     def op_sample_normal(cls, x, y, p):
-        return cls.clip(np.random.normal() * p)
+        return np.clip(np.random.normal(size=cls.tensor_shape(x)) * p, a_min=-1, a_max=1)
 
-    # Disabled for now because clip is too limiting
-    #@FuncMark
-    #def op_sample_poisson(self, x, y, p):
-    #    if p == 0.0:
-    #        return self.default_value
-    #    return np.random.poisson(1.0/p)
+    def get_soft_index(self, v, p_idx):
+        """
+        Return an index relative to the element of the default axis addressed by p_idx which is a value in the
+        interval [-1, 1]
+        :param v: A tensor
+        :param p_idx:
+        :return:
+        """
+        shape = self.tensor_shape(v)
+        if shape is None:
+            return None
+        idx = (p_idx + 1.) / 2.
+        idx = np.round(idx * (shape[self.default_axis] - 1))
+        slices = [slice(k) for k in shape]
+        slices[self.default_axis] = idx
+        return slices
+
+    @FuncMark('base')
+    def op_indexp(self, x, y, p):
+        return x[self.get_soft_index(x, p)]
 
 
 class Cell(hgg.Node):
