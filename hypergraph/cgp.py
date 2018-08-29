@@ -41,10 +41,9 @@ class Operators(ABC):
                 desc = f._hg_cgp_func_mark
                 if desc.factory:
                     ret = f()
-                    if isinstance(ret, collections.Iterable):
-                        return ret
-                    return [ret]
-            return [f]
+                    ret.__name__ = f.__name__
+                    return ret
+            return f
 
         def check_inc(f, *, include):
             if f.__name__ in include:
@@ -60,7 +59,7 @@ class Operators(ABC):
         if exclude is not None:
             ops = filter(lambda f: not check_inc(f, include=exclude), ops)
 
-        return itertools.chain.from_iterable(map(run_func_factory, ops))
+        return map(run_func_factory, ops)
 
 
 class FuncMark:
@@ -82,25 +81,45 @@ class FuncMark:
 
 
 class TensorOperators(Operators):
+    clip_params = {'a_min': -1, 'a_max': 1}
+
     def __init__(self, default_axis=-1):
         if default_axis not in (0, -1):
             raise ValueError()
         self.default_axis = default_axis
+        super().__init__(input_count=2)
 
-    # TODO func to check op codomain function
+    def test_ops(self, trials=10**7):
+        ops = list(self.get_ops())
+        shape_dim_count_max = 3
+        shape_dim_max = 16
 
-    @staticmethod
-    def clip(v):
-        v = np.array(v)
-        isscalar = (v.ndim == 0)
-        v = v[None] if isscalar else v
+        def random_tensor():
+            if np.random.choice(2) == 0:
+                # scalar case
+                return np.random.uniform(-1, 1)
+            dim = np.random.randint(1, shape_dim_count_max + 1)
+            shape = np.random.randint(1, shape_dim_max + 1, size=dim)
+            return np.random.uniform(-1, 1, size=shape)
 
-        # clip values to [-1, 1]
-        np.copyto(v, 1, where=np.isposinf(v) or np.greater(v, 1))
-        np.copyto(v, -1, where=np.isneginf(v) or np.less(v, -1))
-        np.copyto(v, 0, where=np.isnan(v))
+        for _ in range(trials):
+            op = np.random.choice(ops)
+            ret = op(x=random_tensor(), y=random_tensor(), p=np.random.uniform(-1, 1))
+            if np.any(ret != np.clip(ret, -1, 1)):
+                raise ValueError("Values outside bounds for operator " + op.__name__)
 
-        return v[0] if isscalar else v
+    #@staticmethod
+    #def clip(v):
+    #    v = np.array(v)
+    #    isscalar = (v.ndim == 0)
+    #    v = v[None] if isscalar else v
+    #
+    #    # clip values to [-1, 1]
+    #    np.copyto(v, 1, where=np.isposinf(v) or np.greater(v, 1))
+    #    np.copyto(v, -1, where=np.isneginf(v) or np.less(v, -1))
+    #    np.copyto(v, 0, where=np.isnan(v))
+    #
+    #    return v[0] if isscalar else v
 
     @staticmethod
     def tensor_shape(v):
@@ -190,8 +209,9 @@ class TensorOperators(Operators):
         def f(x, y, p):
             isarray = map(lambda v: isinstance(v, np.ndarray), (x, y))
             if all(isarray):
-                shape = np.minimum(x.shape, y.shape)
-                shape = list(map(slice, shape))
+                min_dim = np.minimum(len(x.shape), len(y.shape))
+                shape = np.minimum(x.shape[-min_dim:], y.shape[-min_dim:])
+                shape = [...] + list(map(slice, shape))
                 x, y = x[shape], y[shape]
             return op(x, y)
         return f
@@ -204,7 +224,7 @@ class TensorOperators(Operators):
     @classmethod
     @FuncMark('math', factory=True)
     def op_aminus(cls):
-        return cls.binary_op_factory(lambda x, y: np.abs(x - y))
+        return cls.binary_op_factory(lambda x, y: np.abs(x - y)/2.0)
 
     @classmethod
     @FuncMark('math', factory=True)
@@ -271,10 +291,10 @@ class TensorOperators(Operators):
     def op_cpow(x, y, p):
         return np.power(np.abs(x), p + 1)
 
-    @staticmethod
-    @FuncMark('math')
-    def op_ypow(x, y, p):
-        return np.power(np.abs(x), np.abs(y))
+    @classmethod
+    @FuncMark('math', factory=True)
+    def op_ypow(cls):
+        return cls.binary_op_factory(lambda x, y: np.power(np.abs(x), np.abs(y)))
 
     @staticmethod
     @FuncMark('math')
@@ -299,7 +319,7 @@ class TensorOperators(Operators):
     @staticmethod
     @FuncMark('math')
     def op_atan(x, y, p):
-        return np.arcsin(x)*(4./np.pi)
+        return np.arctan(x)*(4./np.pi)
 
     @staticmethod
     @FuncMark('math')
@@ -314,18 +334,18 @@ class TensorOperators(Operators):
     @FuncMark('math')
     def op_sum(self, x, y, p):
         if isinstance(x, np.ndarray):
-            return self.clip(x.sum(axis=self.default_axis))
+            return np.clip(x.sum(axis=self.default_axis), **self.clip_params)
         return x
 
     @FuncMark('math')
     def op_cumsum(self, x, y, p):
         if isinstance(x, np.ndarray):
-            return self.clip(x.cumsum(axis=self.default_axis))
+            return np.clip(x.cumsum(axis=self.default_axis), **self.clip_params)
         return x
 
     @FuncMark('math')
     def op_cumprod(self, x, y, p):
-        return x.cumprod(axis=self.default_axis)
+        return np.cumprod(x, axis=self.default_axis)
 
     @classmethod
     @FuncMark('stochastic')
@@ -335,7 +355,7 @@ class TensorOperators(Operators):
     @classmethod
     @FuncMark('stochastic')
     def op_sample_normal(cls, x, y, p):
-        return np.clip(np.random.normal(size=cls.tensor_shape(x)) * p, a_min=-1, a_max=1)
+        return np.clip(np.random.normal(size=cls.tensor_shape(x)) * p, **cls.clip_params)
 
     def get_soft_index(self, v, p_idx):
         """
@@ -349,14 +369,37 @@ class TensorOperators(Operators):
         if shape is None:
             return None
         idx = (p_idx + 1.) / 2.
-        idx = np.round(idx * (shape[self.default_axis] - 1))
+        idx = int(np.round(idx * (shape[self.default_axis] - 1)))
         slices = [slice(k) for k in shape]
         slices[self.default_axis] = idx
         return slices
 
     @FuncMark('base')
     def op_indexp(self, x, y, p):
-        return x[self.get_soft_index(x, p)]
+        idx = self.get_soft_index(x, p)
+        if idx is None:
+            return 0.
+        return x[idx]
+
+    @FuncMark('stat')
+    def op_mean(self, x, y, p):
+        if not isinstance(x, np.ndarray):
+            return x
+        return np.mean(x, axis=self.default_axis)
+
+    @FuncMark('stat')
+    def op_range(self, x, y, p):
+        if not isinstance(x, np.ndarray):
+            return x
+        return np.max(x, axis=self.default_axis)-np.min(x, axis=self.default_axis)-1
+
+    @FuncMark('stat')
+    def op_stddev(self, x, y, p):
+        if not isinstance(x, np.ndarray):
+            return x
+        return np.clip(np.std(x, axis=self.default_axis), **self.clip_params)
+
+    # TODO skew, kurtosis and the other list operations
 
 
 class Cell(hgg.Node):
@@ -394,7 +437,7 @@ class RegularGrid:
                  operators: Operators, backward_length=1, name=None):
         """
         Init the network factory
-        :param input_range:
+        :param input_range: A list of keys of a range
         :param shape:
         :param output_factory:
         :param operators:
