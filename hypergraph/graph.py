@@ -9,7 +9,7 @@ import weakref
 from .utils import export
 import inspect
 import uuid
-
+import pandas as pd
 
 # Separator used in fully qualified names
 FQ_NAME_SEP = '.'
@@ -351,6 +351,12 @@ class NodeId:
     def name(self) -> str:
         return self._name
 
+    def __str__(self):
+        return "NodeId(\'" + self.name + "\')"
+
+    def __repr__(self):
+        return "NodeId(\'" + self.name + "\')"
+
 
 @export
 def node(node):
@@ -528,7 +534,7 @@ def link(node, input_bindings=None, deps=None) -> [Node, None]:
 
     if isinstance(node, Node):
         return node
-    return Graph.nodeId(node)
+    return Node.nodeId(node)
 
 
 @export
@@ -860,6 +866,15 @@ class Graph:
         if not isinstance(name, str):
             raise ValueError("Graph name is expected to be a string")
         self._name = name
+
+    def dump(self):
+        nodes = dict([(n, [str(type(v))]) for n, v in self.nodes.items()])
+        nodes = pd.DataFrame.from_dict(nodes, orient='index')
+        print(nodes)
+
+        links = dict([(n, [str(v)]) for n, v in self.links.items()])
+        links = pd.DataFrame.from_dict(links, orient='index')
+        print(links)
 
     @property
     def name(self) -> str:

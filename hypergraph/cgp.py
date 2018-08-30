@@ -515,7 +515,7 @@ class RegularGrid:
         grid = self.get_grid_coords_list(map(range, shape))
         rows_range = range(shape[0])
 
-        output = g.Graph(name=self.name)
+        output = hgg.Graph(name=self.name)
         with output.as_default():
             inputs = self.create_inputs()
 
@@ -532,7 +532,7 @@ class RegularGrid:
                     # input layer link
                     connections += inputs
                 j0 = max(j0, 0)
-                connections += map(hgg.node_ref, self.get_comp_name('c', rows_range, range(j0, max(0, j-1))))
+                connections += map(hgg.node_ref, self.get_comp_name('c', rows_range, range(j0, j)))
 
                 if j == shape[1]:
                     # connect outputs
