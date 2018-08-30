@@ -59,7 +59,7 @@ class Operators(ABC):
         if exclude is not None:
             ops = filter(lambda f: not check_inc(f, include=exclude), ops)
 
-        return map(run_func_factory, ops)
+        return list(map(run_func_factory, ops))
 
 
 class FuncMark:
@@ -120,6 +120,10 @@ class TensorOperators(Operators):
     #    np.copyto(v, 0, where=np.isnan(v))
     #
     #    return v[0] if isscalar else v
+
+    @property
+    def null_value(self):
+        return 0.
 
     @staticmethod
     def tensor_shape(v):
@@ -500,10 +504,17 @@ class RegularGrid:
         return grid
 
     def create_inputs(self):
+        # TODO check that we have at least ops.input_count inputs
+        ops = self.operators
+
+        def gen_null_inputs(real_input_count):
+            return [ops.null_value for _ in range(max(0, ops.input_count - real_input_count))]
+
         if self.input_range is not None:
             # TODO + [hgg.input_all()]? (if possible)
-            return [hgg.input_key(key=k) for k in self.input_range]
-        return [hgg.input_all()]
+            return [hgg.input_key(key=k) for k in self.input_range] + gen_null_inputs(len(self.input_range))
+        # we assure that we have at least ops.input_count inputs
+        return [hgg.input_all()] + gen_null_inputs(1)
 
     def __call__(self):
         ops = self.operators

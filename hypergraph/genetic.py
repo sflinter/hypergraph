@@ -103,6 +103,10 @@ class GeneticBase:
 
 
 class MutationOnlyEvoStrategy(GeneticBase):
+    """
+    1+lambda evolutionary strategy
+    """
+
     def __init__(self, graph: hgg.Graph, fitness, *, opt_mode='max', lambda_=4, mutation_prob=0.1, generations=10**4):
         # TODO callback
         # TODO validate params
@@ -112,6 +116,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
         self.fitness = fitness
         self.opt_mode = opt_mode
         self.lambda_ = lambda_
+        self.mutation_prob = mutation_prob
         self.generations = generations
         super().__init__(graph=graph)
         self.parent = None
@@ -125,42 +130,46 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
     @property
     def best(self):
+        """
+        The best individual
+        :return:
+        """
         p = self.parent
         return None if p is None else dict(p)
 
     def __call__(self):
-        for c in range(self.generations):
-            parent = self.parent
-            parent_score = self.parent_score
-            fitness = self.fitness
-            opt_mode = self.opt_mode
+        parent = self.parent
+        parent_score = self.parent_score
+        fitness = self.fitness
+        opt_mode = self.opt_mode
 
-            if parent is None:
-                parent = self.create_population()
+        def score_cmp_min(a, b):
+            return a <= b
 
+        def score_cmp_max(a, b):
+            return a >= b
+
+        score_cmp = score_cmp_min if opt_mode == 'min' else score_cmp_max
+        hit = 0
+
+        if parent is None:
+            parent = self.create_population()
+        if parent_score is None:
+            parent_score = fitness(parent)
             if parent_score is None:
-                parent_score = fitness(parent)
-                if parent_score is None:
-                    raise ValueError()
+                raise ValueError()
 
-            hit = False
-            offspring = [self.mutations(parent) for _ in self.lambda_]
+        for c in range(self.generations):
+            offspring = [self.mutations(parent, prob=self.mutation_prob) for _ in self.lambda_]
             for child in offspring:
                 score = fitness(child)
                 if score is None:
                     break
-                if opt_mode == 'min':
-                    if score <= parent_score:
-                        parent = child
-                        parent_score = score
-                        hit = True
-                else:
-                    if score >= parent_score:
-                        parent = child
-                        parent_score = score
-                        hit = True
+                if score_cmp(score, parent_score):
+                    parent = child
+                    parent_score = score
+                    hit = 1
 
             self.parent = parent
             self.parent_score = parent_score
-            if hit:
-                self.hit_counter += 1
+            self.hit_counter += hit
