@@ -126,6 +126,14 @@ class TensorOperators(Operators):
         return 0.
 
     @staticmethod
+    def to_scalar(value):
+        value = np.array(value)
+        if np.shape(value) != ():
+            value = value.flat
+            value = 0 if len(value) == 0 else value[0]
+        return np.float(value)
+
+    @staticmethod
     def tensor_shape(v):
         v = np.shape(v)
         return None if v == () else v
