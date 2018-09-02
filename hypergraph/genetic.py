@@ -160,7 +160,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
                 raise ValueError()
 
         for c in range(self.generations):
-            offspring = [self.mutations(parent, prob=self.mutation_prob) for _ in self.lambda_]
+            offspring = [self.mutations(parent, prob=self.mutation_prob) for _ in range(self.lambda_)]
             for child in offspring:
                 score = fitness(child)
                 if score is None:
@@ -173,3 +173,8 @@ class MutationOnlyEvoStrategy(GeneticBase):
             self.parent = parent
             self.parent_score = parent_score
             self.hit_counter += hit
+
+            if c % 100 == 0:
+                print("**** **** ****")
+                print("best: "+str(self.parent))
+                print("best_score: "+str(self.parent_score)+", generation: "+str(c))

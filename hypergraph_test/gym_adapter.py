@@ -15,6 +15,14 @@ class ValueAdapter(abc.ABC):
     def from_gym(self, value):
         pass
 
+    @abc.abstractmethod
+    def create_graph_input_range(self):
+        pass
+
+    @abc.abstractmethod
+    def create_graph_output_factory(self):
+        pass
+
     @staticmethod
     def get(space: gym.Space):
         if isinstance(space, gym.spaces.Discrete):
@@ -35,6 +43,12 @@ class DiscreteAdapter(ValueAdapter):
         value = cgp.TensorOperators.to_scalar(value)
         return int(np.round((self.space.n-1)*(value+1.)/2.))
 
+    def create_graph_input_range(self):
+        return None
+
+    def create_graph_output_factory(self):
+        return hg_utils.SingleValueStructFactory()
+
 
 class BoxAdapter(ValueAdapter):
     def __init__(self, space: gym.spaces.Box):
@@ -47,6 +61,12 @@ class BoxAdapter(ValueAdapter):
         return value
 
     def to_gym(self, value):
+        raise NotImplemented()
+
+    def create_graph_input_range(self):
+        return None
+
+    def create_graph_output_factory(self):
         raise NotImplemented()
 
 
@@ -66,10 +86,13 @@ class GymManager:
     # TODO def test(self, individual):
 
     def get_cgp_net_factory_config(self) -> dict:
-        # TODO
+        """
+        Create some of the parameters necessary to init a CGP network factory
+        :return:
+        """
         return {
-            'input_range': ...,
-            'output_factory': ...
+            'input_range': self.adapters[0].create_graph_input_range(),
+            'output_factory': self.adapters[1].create_graph_output_factory()
         }
 
     def create_fitness(self, graph: hg.Graph):
