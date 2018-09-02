@@ -44,12 +44,12 @@ class ExecutionContext:
         return cls.get_default()
 
     @classmethod
-    def get_default(cls):
+    def get_default(cls, auto_init=True):
         """
         Returns the execution context. If there is no default context then a new one is instantiated
         :return:
         """
-        if cls._default is None:
+        if (cls._default is None) and auto_init:
             cls._default = ExecutionContext()
         return cls._default
 
@@ -84,25 +84,23 @@ class ExecutionContext:
         self.tweaks = tweaks
 
     def set_var(self, graph=None, var=None, value=None):
-        var = Graph.get_node_ext(var, graph)
-        graph = var.parent
-        if not isinstance(var, Variable):
-            raise ValueError('The node var must be of type Variable')
+        graph, var = Variable.get_var_name(graph=graph, var=var)
+        if graph is None:
+            raise ValueError('Not enough info supplied')
 
         vars_ = self._vars_per_graph.setdefault(graph, {})
-        var.check_type(value)
-        vars_[var.name] = value
+        # var.check_type(value)
+        vars_[var] = value
 
-    def get_var_value(self, graph=None, var=None):
-        var = Graph.get_node_ext(var, graph)
-        graph = var.parent
-        if not isinstance(var, Variable):
-            raise ValueError('The node var must be of type Variable')
+    def get_var_value(self, graph=None, var=None, default=None):
+        graph, var = Variable.get_var_name(graph=graph, var=var)
+        if graph is None:
+            raise ValueError('Not enough info supplied')
 
         vars_ = self._vars_per_graph.get(graph)
         if vars_ is None:
             return None
-        return vars_[var.name]
+        return vars_.get(var, default)
 
 
 @export
@@ -664,25 +662,64 @@ def struct_copy(iterable):
 
 @export
 class Variable(Node):
-    def __init__(self, name, dtypes=None):       # TODO initial value!
-        self._dtypes = dtypes
-        super().__init__(name)
+    def __init__(self, var_name, initial_value=None):
+        self.var_name = var_name
+        super().__init__()
+        if initial_value is not None:
+            add_event_handler('init', deps=[self << SetVar(initial_value)])
 
-    @property
-    def dtypes(self):
-        return self._dtypes
+    #@property
+    #def dtypes(self):
+    #    return self._dtypes
 
-    def set_value(self, ctx=None, value=None):
-        ctx = ExecutionContext.get_instance(ctx)
-        ctx.set_var(graph=self.parent, var=self, value=value)
+    #def set_value(self, ctx=None, value=None):
+    #    ctx = ExecutionContext.get_instance(ctx)
+    #    ctx.set_var(graph=self.parent, var=self, value=value)
 
-    def check_type(self, value):
-        if self.dtypes is not None:
-            if not isinstance(value, self.dtypes):
-                raise ValueError('The variable has a restricted set of allowed types')
+    #def check_type(self, value):
+    #    if self.dtypes is not None:
+    #        if not isinstance(value, self.dtypes):
+    #            raise ValueError('The variable has a restricted set of allowed types')
+
+    @staticmethod
+    def get_var_name(*, graph=None, var=None):
+        if isinstance(var, (Node, NodeId)):
+            var = Graph.get_node_ext(var, graph)
+            if not isinstance(var, Variable):
+                raise ValueError('The node var must be of type Variable')
+            graph = var.parent
+            var = var.var_name
+        return graph, var
 
     def __call__(self, input, hpopt_config={}):
-        return ExecutionContext.get_default().get_var_value(self)
+        # TODO create a special wrapper to set the variable value
+        ctx = ExecutionContext.get_default(auto_init=False)
+        if isinstance(input, SetVar):
+            ctx.set_var(var=self, value=input.value)
+            return input.value
+        return ctx.get_var_value(var=self)
+
+
+@export
+def var(name, initial_value=None):
+    return Variable(var_name=name, initial_value=initial_value)
+
+
+@export
+class SetVar:
+    """
+    A warpper that when passed as input to a node of type Variable it sets the value of the corresponding
+    variable.
+    """
+    def __init__(self, value):
+        self.value = value
+
+
+@export
+def set_var(var):
+    wrapper = call1(lambda input: SetVar(input))
+    var = Variable(var_name=var) << wrapper
+    return indirect(input_node=wrapper, output_node=var)
 
 
 class Jump(NonExecutable):
@@ -866,6 +903,10 @@ class Graph:
         if not isinstance(name, str):
             raise ValueError("Graph name is expected to be a string")
         self._name = name
+
+        with self.as_default():
+            # create internal variable used to manage the initialization
+            var('__hg_init__')
 
     def dump(self):
         nodes = dict([(n, [str(type(v))]) for n, v in self.nodes.items()])
@@ -1203,6 +1244,11 @@ class Graph:
                     self.run_node(h)
 
         def run(self, nodes):
+            ctx = ExecutionContext.get_default()
+            if not ctx.get_var_value(graph=self.parent, var='__hg_init__', default=False):
+                self.run_event_handlers('init')
+                ctx.set_var(self.parent, '__hg_init__', True)
+
             # Execute on enter handlers
             self.run_event_handlers('enter')
 
@@ -1272,7 +1318,7 @@ Graph.operators_reg = {
     '#$#g.merge': merge
 }
 
-Graph.event_types = {'enter', 'exit'}   # TODO exception handler
+Graph.event_types = {'init', 'enter', 'exit'}   # TODO exception handler
 
 Graph.adapters = {  # A map type: adapter
     types.FunctionType: lambda f: Lambda(func=f),

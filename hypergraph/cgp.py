@@ -446,7 +446,7 @@ class RegularGrid:
     """
 
     def __init__(self, input_range, shape, output_factory: StructFactory,
-                 operators: Operators, backward_length=1, name=None):
+                 operators: Operators, backward_length=1, feedback=False, name=None):
         """
         Init the network factory
         :param input_range: A list of keys of a range
@@ -454,6 +454,7 @@ class RegularGrid:
         :param output_factory:
         :param operators:
         :param backward_length:
+        :param feedback: When true a feedback connection is created
         :param name: The name associated to the returned graph
         """
         if not isinstance(backward_length, int):
@@ -472,6 +473,7 @@ class RegularGrid:
         self.output_factory = output_factory
         self.operators = operators
         self.backward_length = backward_length
+        self.feedback = bool(feedback)
         self.name = name
 
     @classmethod
@@ -515,14 +517,20 @@ class RegularGrid:
         # TODO check that we have at least ops.input_count inputs
         ops = self.operators
 
-        def gen_null_inputs(real_input_count):
-            return [ops.null_value for _ in range(max(0, ops.input_count - real_input_count))]
+        if self.feedback:
+            hgg.var('feedback', initial_value=ops.null_value)
+
+        def gen_extra_inputs(real_input_count):
+            extra = [ops.null_value for _ in range(max(0, ops.input_count - (real_input_count + self.feedback)))]
+            if self.feedback:
+                extra += [hgg.var('feedback')]
+            return extra
 
         if self.input_range is not None:
             # TODO + [hgg.input_all()]? (if possible)
-            return [hgg.input_key(key=k) for k in self.input_range] + gen_null_inputs(len(self.input_range))
+            return [hgg.input_key(key=k) for k in self.input_range] + gen_extra_inputs(len(self.input_range))
         # we assure that we have at least ops.input_count inputs
-        return [hgg.input_all()] + gen_null_inputs(1)
+        return [hgg.input_all()] + gen_extra_inputs(1)
 
     def __call__(self):
         ops = self.operators
@@ -557,6 +565,10 @@ class RegularGrid:
                     # connect outputs
                     hgg.output() << output_factory([(tweaks.switch() << connections)
                                                     for _ in range(output_factory.input_size)])
+                    if self.feedback:
+                        # TODO connect feeback var set to previous nodes, insert a dependency
+                        # so that the variable will be set.
+                        raise NotImplemented()
                 else:
                     for i in range(shape[0]):
                         hgg.link(hgg.node_ref(self.get_comp_name('p', i, j)), connections)
