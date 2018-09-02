@@ -102,6 +102,11 @@ class GeneticBase:
         return individual
 
 
+class History:  # TODO callback
+    def __init__(self):
+        self.generations = []
+
+
 class MutationOnlyEvoStrategy(GeneticBase):
     """
     1+lambda evolutionary strategy
@@ -121,12 +126,12 @@ class MutationOnlyEvoStrategy(GeneticBase):
         super().__init__(graph=graph)
         self.parent = None
         self.parent_score = None
-        self.hit_counter = 0
+        self.history = None
 
     def reset(self):
         self.parent = None
         self.parent_score = None
-        self.hit_counter = 0
+        self.history = History()
 
     @property
     def best(self):
@@ -138,6 +143,8 @@ class MutationOnlyEvoStrategy(GeneticBase):
         return None if p is None else dict(p)
 
     def __call__(self):
+        self.reset()
+
         parent = self.parent
         parent_score = self.parent_score
         fitness = self.fitness
@@ -150,7 +157,6 @@ class MutationOnlyEvoStrategy(GeneticBase):
             return a >= b
 
         score_cmp = score_cmp_min if opt_mode == 'min' else score_cmp_max
-        hit = 0
 
         if parent is None:
             parent = self.create_population()
@@ -160,6 +166,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
                 raise ValueError()
 
         for c in range(self.generations):
+            hit = 0
             offspring = [self.mutations(parent, prob=self.mutation_prob) for _ in range(self.lambda_)]
             for child in offspring:
                 score = fitness(child)
@@ -172,9 +179,12 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
             self.parent = parent
             self.parent_score = parent_score
-            self.hit_counter += hit
+            if hit:
+                # TODO move to a specific callback
+                self.history.generations.append({'idx': c, 'best_score': parent_score}) # TODO include datetime
 
             if c % 100 == 0:
+                # TODO move to a specific callback
                 print("**** **** ****")
                 print("best: "+str(self.parent))
                 print("best_score: "+str(self.parent_score)+", generation: "+str(c))

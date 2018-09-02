@@ -19,6 +19,7 @@ class Distribution(ABC):
         return copy.copy(self._space_descriptor)
 
     # TODO def sample_from_uniform(v) where v is a value in [0, 1]
+    # TODO operator 'in'
 
 
 @export

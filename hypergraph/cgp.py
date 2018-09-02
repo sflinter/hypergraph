@@ -174,19 +174,12 @@ class TensorOperators(Operators):
 
     @FuncMark('base')
     def op_head(self, x, y, p):
-        if isinstance(x, np.ndarray):
-            if np.size(x) == 0:
-                return 0.
-            return x[0]
-        return x
+        # TODO head and tail should refer to the default_axis
+        return self.unary_vec_op_or_ident(x, lambda v: v[0])
 
     @FuncMark('base')
     def op_last(self, x, y, p):
-        if isinstance(x, np.ndarray):
-            if np.size(x) == 0:
-                return 0.
-            return x[-1]
-        return x
+        return self.unary_vec_op_or_ident(x, lambda v: v[-1])
 
     @staticmethod
     @FuncMark('base')
@@ -393,11 +386,25 @@ class TensorOperators(Operators):
             return 0.
         return x[idx]
 
+    @staticmethod
+    def unary_vec_op_or_ident(x, func):     # TODO use in all unary ops
+        x = np.array(x)
+        if np.size(x) == 0:
+            return 0.
+        if x.shape == ():
+            return x
+        return func(x)
+
+    @staticmethod
+    def unary_vec_op_or_zero(x, func):
+        x = np.array(x)
+        if (np.size(x) == 0) or (x.shape == ()):
+            return 0.
+        return func(x)
+
     @FuncMark('stat')
     def op_mean(self, x, y, p):
-        if not isinstance(x, np.ndarray):
-            return x
-        return np.mean(x, axis=self.default_axis)
+        return self.unary_vec_op_or_ident(x, partial(np.mean, axis=self.default_axis))
 
     @FuncMark('stat')
     def op_range(self, x, y, p):
@@ -407,9 +414,9 @@ class TensorOperators(Operators):
 
     @FuncMark('stat')
     def op_stddev(self, x, y, p):
-        if not isinstance(x, np.ndarray):
-            return x
-        return np.clip(np.std(x, axis=self.default_axis), **self.clip_params)
+        def f(v):
+            return np.clip(np.std(v, axis=self.default_axis), **self.clip_params)
+        return self.unary_vec_op_or_zero(x, f)
 
     # TODO skew, kurtosis and the other list operations
 
