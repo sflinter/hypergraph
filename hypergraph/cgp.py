@@ -59,7 +59,10 @@ class Operators(ABC):
         if exclude is not None:
             ops = filter(lambda f: not check_inc(f, include=exclude), ops)
 
-        return list(map(run_func_factory, ops))
+        ops = list(map(run_func_factory, ops))
+        if len(ops) == 0:
+            raise RuntimeError("The selected operator list is empty")
+        return ops
 
 
 class FuncMark:

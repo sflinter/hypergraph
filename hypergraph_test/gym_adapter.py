@@ -71,17 +71,24 @@ class BoxAdapter(ValueAdapter):
 
 
 class GymManager:
-    def __init__(self, env: gym.Env, *, max_steps=100):
+    def __init__(self, env: gym.Env, *, max_steps=100, trials_per_individual=1):
         if not isinstance(env, gym.Env):
             raise ValueError()
+
         if not isinstance(max_steps, int):
             raise ValueError()
         if max_steps <= 0:
             raise ValueError()
 
+        if not isinstance(trials_per_individual, int):
+            raise ValueError()
+        if trials_per_individual <= 0:
+            raise ValueError()
+
         self.env = env
         self.max_steps = max_steps
         self.adapters = tuple(map(ValueAdapter.get, [env.observation_space, env.action_space]))
+        self.trials_per_individual = trials_per_individual
 
     # TODO def test(self, individual):
 
@@ -103,16 +110,18 @@ class GymManager:
             env = self.env
             adapters = self.adapters
 
-            observation = env.reset()
             total_reward = 0
-            ctx = hg.ExecutionContext(tweaks=individual)
-            with ctx.as_default():
-                for t in range(self.max_steps):
-                    action = graph(input=adapters[0].from_gym(observation))
-                    action = adapters[1].to_gym(action)
-                    observation, reward, done, info = env.step(action)
-                    total_reward += reward
-                    if done:
-                        break
-            return total_reward
+            trials = self.trials_per_individual
+            for _ in range(trials):
+                observation = env.reset()
+                ctx = hg.ExecutionContext(tweaks=individual)
+                with ctx.as_default():
+                    for t in range(self.max_steps):
+                        action = graph(input=adapters[0].from_gym(observation))
+                        action = adapters[1].to_gym(action)
+                        observation, reward, done, info = env.step(action)
+                        total_reward += reward
+                        if done:
+                            break
+            return total_reward/trials
         return fitness
