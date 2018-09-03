@@ -4,6 +4,7 @@ import abc
 import numpy as np
 import hypergraph.cgp as cgp
 import hypergraph.utils as hg_utils
+import time
 
 
 class ValueAdapter(abc.ABC):
@@ -71,7 +72,7 @@ class BoxAdapter(ValueAdapter):
 
 
 class GymManager:
-    def __init__(self, env: gym.Env, *, max_steps=100, trials_per_individual=1):
+    def __init__(self, env: gym.Env, *, max_steps=100, trials_per_individual=1, action_prob=1):
         if not isinstance(env, gym.Env):
             raise ValueError()
 
@@ -85,12 +86,39 @@ class GymManager:
         if trials_per_individual <= 0:
             raise ValueError()
 
+        # TODO validate action_prob
+
         self.env = env
         self.max_steps = max_steps
         self.adapters = tuple(map(ValueAdapter.get, [env.observation_space, env.action_space]))
         self.trials_per_individual = trials_per_individual
+        self.action_prob = action_prob
 
-    # TODO def test(self, individual):
+    def test(self, graph: hg.Graph, individual, *, speed=1.0):
+        env = self.env
+        adapters = self.adapters
+
+        fps = env.metadata['video.frames_per_second']
+        frame_time = 1.0/(fps*speed)
+
+        total_reward = 0
+        observation = env.reset()
+        ctx = hg.ExecutionContext(tweaks=individual)
+        action_prob = self.action_prob
+        action_valid = False
+        action = None
+        with ctx.as_default():
+            while True:
+                env.render()
+                time.sleep(frame_time)
+                if (not action_valid) or action_prob == 1 or np.random.uniform() <= action_prob:
+                    action = graph(input=adapters[0].from_gym(observation))
+                    action = adapters[1].to_gym(action)
+                    action_valid = True
+                observation, reward, done, info = env.step(action)
+                total_reward += reward
+                if done:
+                    break
 
     def get_cgp_net_factory_config(self) -> dict:
         """
@@ -112,13 +140,18 @@ class GymManager:
 
             total_reward = 0
             trials = self.trials_per_individual
+            action_prob = self.action_prob
+            action_valid = False
+            action = None
             for _ in range(trials):
                 observation = env.reset()
                 ctx = hg.ExecutionContext(tweaks=individual)
                 with ctx.as_default():
                     for t in range(self.max_steps):
-                        action = graph(input=adapters[0].from_gym(observation))
-                        action = adapters[1].to_gym(action)
+                        if (not action_valid) or action_prob == 1 or np.random.uniform() <= action_prob:
+                            action = graph(input=adapters[0].from_gym(observation))
+                            action = adapters[1].to_gym(action)
+                            action_valid = True
                         observation, reward, done, info = env.step(action)
                         total_reward += reward
                         if done:

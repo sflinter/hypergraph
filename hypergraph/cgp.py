@@ -572,13 +572,15 @@ class RegularGrid:
                 connections += map(hgg.node_ref, self.get_comp_name('c', rows_range, range(j0, j)))
 
                 if j == shape[1]:
+                    # TODO different probability for output nodes
+
                     # connect outputs
                     hgg.output() << output_factory([(tweaks.switch() << connections)
                                                     for _ in range(output_factory.input_size)])
                     if self.feedback:
-                        # TODO connect feeback var set to previous nodes, insert a dependency
-                        # so that the variable will be set.
-                        raise NotImplemented()
+                        # TODO to be tested!
+                        set_feedback = hgg.set_var('feedback') << (tweaks.switch() << connections)
+                        hgg.add_event_handler('exit', set_feedback)
                 else:
                     for i in range(shape[0]):
                         hgg.link(hgg.node_ref(self.get_comp_name('p', i, j)), connections)
