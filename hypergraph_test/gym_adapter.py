@@ -86,7 +86,7 @@ class GymManager:
         if trials_per_individual <= 0:
             raise ValueError()
 
-        # TODO validate action_prob
+        # TODO validate action_prob, max_reward
 
         self.env = env
         self.max_steps = max_steps

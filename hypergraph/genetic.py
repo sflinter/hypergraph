@@ -112,7 +112,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
     1+lambda evolutionary strategy
     """
 
-    def __init__(self, graph: hgg.Graph, fitness, *, opt_mode='max', lambda_=4, mutation_prob=0.1, generations=10**4):
+    def __init__(self, graph: hgg.Graph, fitness, *, opt_mode='max', lambda_=4, generations=10**4):
         # TODO callback
         # TODO validate params
         if opt_mode not in ['min', 'max']:
@@ -121,7 +121,6 @@ class MutationOnlyEvoStrategy(GeneticBase):
         self.fitness = fitness
         self.opt_mode = opt_mode
         self.lambda_ = lambda_
-        self.mutation_prob = mutation_prob
         self.generations = generations
         super().__init__(graph=graph)
         self.parent = None
@@ -167,11 +166,12 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
         for c in range(self.generations):
             hit = 0
-            offspring = [self.mutations(parent, prob=self.mutation_prob) for _ in range(self.lambda_)]
+            offspring = [self.mutations(parent, prob=np.random.uniform()) for _ in range(self.lambda_)]
             for child in offspring:
                 score = fitness(child)
                 if score is None:
                     break
+                # TODO define score_thr, when achieved, stop
                 if score_cmp(score, parent_score):
                     parent = child
                     parent_score = score
