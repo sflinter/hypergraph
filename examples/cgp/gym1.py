@@ -24,7 +24,7 @@ strategy()
 print("best:" + str(strategy.best))
 
 history = pd.DataFrame(strategy.history.generations)
-#history.set_index('idx')
+# history.set_index('idx')
 history.plot(x='idx', y='best_score')
 plt.show()
 print(history)
