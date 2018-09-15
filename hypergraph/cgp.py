@@ -424,7 +424,61 @@ class TensorOperators(Operators):
     # TODO skew, kurtosis and the other list operations
 
 
+class SymbolicEntity:
+    pass
+
+
+class SymbolicInvocation(SymbolicEntity):
+    def __init__(self, f, params):
+        self.f = f
+        self.params = params
+
+    def __str__(self):
+        output = self.f.__name__ + '('
+        params = self.params
+        params = map(str, params)
+        output += ', '.join(params)
+        output += ')'
+        return output
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class SymbolicVariable(SymbolicEntity):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return 'var(' + self.name + ')'
+
+    def __repr__(self):
+        return self.__str__()
+
+
+def exec_symbolically(graph: hgg.Graph, tweaks={}):     # TODO move all to graph?
+    if not isinstance(graph, hgg.Graph):
+        raise ValueError()
+
+    tweaks = tweaks.copy()
+    tweaks[Cell.SYMBOLIC_TWEAK] = True
+    ctx = hgg.ExecutionContext(tweaks=tweaks)
+    for var in graph.get_vars():
+        ctx.set_var(var=var, value=SymbolicVariable(var.fq_var_name))
+
+    output = {}
+    with ctx.as_default():
+        output['__output__'] = graph(SymbolicVariable('__input__'))
+
+    for var in graph.get_vars():
+        output[var.fq_var_name] = ctx.get_var_value(var=var)
+
+    return output
+
+
 class Cell(hgg.Node):
+    SYMBOLIC_TWEAK = 'hg.cgp.symbolic'
+
     def __init__(self, operators: Operators, name=None):
         if not isinstance(operators, Operators):
             raise ValueError()
@@ -439,6 +493,17 @@ class Cell(hgg.Node):
             prefix + '_p': tweaks.Uniform(low=-1.0, high=1.0)     # TODO get distribution from operators
         }
 
+    def get_contextual_descriptor(self, desc_ctx):
+        ctx = hgg.ExecutionContext.get_default(auto_init=False)
+        if ctx is None:
+            return super().get_contextual_descriptor(desc_ctx)
+
+        if desc_ctx == 'hg.cgp.formula':
+            f = ctx.tweaks.get(self.fully_qualified_name + '_f')
+            if f is not None:
+                return f.__name__
+        return super().get_contextual_descriptor(desc_ctx)
+
     def __call__(self, input, hpopt_config={}):
         ops = self.operators
         direct_inputs = input[:ops.input_count]
@@ -446,6 +511,9 @@ class Cell(hgg.Node):
         prefix = self.fully_qualified_name
         f = hpopt_config[prefix + '_f']
         p = hpopt_config[prefix + '_p']
+
+        if bool(hpopt_config.get(self.SYMBOLIC_TWEAK, False)):
+            return SymbolicInvocation(f, direct_inputs + [p])
 
         return f(*direct_inputs, p)
 

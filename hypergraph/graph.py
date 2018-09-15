@@ -140,8 +140,15 @@ class Node(ABC):
     def name(self) -> str:
         return self._name
 
+    def get_contextual_descriptor(self, desc_ctx):
+        return None
+
     @property
-    def fully_qualified_name(self) -> str:
+    def fully_qualified_name(self) -> str:  # TODO rename fq_name
+        """
+        Return the fully qualified node name
+        :return:
+        """
         g = self.parent
         if g is None:
             raise RuntimeError()
@@ -668,18 +675,12 @@ class Variable(Node):
         if initial_value is not None:
             add_event_handler('init', deps=[self << SetVar(initial_value)])
 
-    #@property
-    #def dtypes(self):
-    #    return self._dtypes
-
-    #def set_value(self, ctx=None, value=None):
-    #    ctx = ExecutionContext.get_instance(ctx)
-    #    ctx.set_var(graph=self.parent, var=self, value=value)
-
-    #def check_type(self, value):
-    #    if self.dtypes is not None:
-    #        if not isinstance(value, self.dtypes):
-    #            raise ValueError('The variable has a restricted set of allowed types')
+    @property
+    def fq_var_name(self) -> str:
+        g = self.parent
+        if g is None:
+            raise RuntimeError()
+        return g.name + FQ_NAME_SEP + self.var_name
 
     @staticmethod
     def get_var_name(*, graph=None, var=None):
@@ -1092,6 +1093,20 @@ class Graph:
         if node is None:
             raise ValueError(ownership_err_str)
         return node
+
+    def get_vars(self, *, recursive=True):
+        """
+        Return an iterable of the variables contained in this graph and all subgraphs
+        :param recursive:
+        :return:
+        """
+        # TODO avoid loops, check unicity
+        direct = filter(lambda n: isinstance(n, Variable), self.nodes.values())
+        if recursive:
+            subgraphs = filter(lambda n: isinstance(n, Subgraph), self.nodes.values())
+            subgraphs = map(lambda n: n.graph.get_vars(), subgraphs)
+            return itertools.chain(direct, subgraphs)
+        return direct
 
     def get_var(self, var):
         var = self.get_node(var)

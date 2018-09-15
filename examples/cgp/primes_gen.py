@@ -18,7 +18,6 @@ def primes_gen(limit):
 
 primes = set([n for n in primes_gen(1024)])
 
-# TODO create IntOperators
 op = cgp_int_op.IntOperators()
 
 grid = cgp.RegularGrid(shape=(1, 5), input_range=None, output_factory=hg_utils.SingleValueStructFactory(),
