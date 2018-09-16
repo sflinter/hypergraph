@@ -19,7 +19,7 @@ grid = cgp.RegularGrid(shape=(5, 5), **gymman.get_cgp_net_factory_config(),
 grid = grid()
 grid.dump()
 
-strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=100) # 10*10**3
+strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10*10**3)
 strategy()
 print("best:" + str(strategy.best))
 

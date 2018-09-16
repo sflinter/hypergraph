@@ -70,13 +70,15 @@ class FuncMark:
     A decorator to mark a function factory for the CGP' node.
     """
 
-    def __init__(self, group: str=None, *, factory: bool=False):
+    def __init__(self, group: str=None, *, factory: bool=False, sym_exp=None):
         """
         Init func factory
         :param factory: boolean, when true the function is an operator factory that returns an operator or a list of them.
+        :param sym_exp: a custom function to be used for symbolic expansion
         """
         self.factory = factory
         self.group = group
+        self.sym_exp = sym_exp
 
     def __call__(self, f):
         f._hg_cgp_func_mark = self
@@ -142,38 +144,37 @@ class TensorOperators(Operators):
         return None if v == () else v
 
     @staticmethod
-    @FuncMark('base')
+    @FuncMark('base', sym_exp=lambda x, y, p: x)
     def op_identity(x, y, p):
         return x
 
     @staticmethod
-    @FuncMark('base')
+    @FuncMark('base', sym_exp=lambda x, y, p: y)
     def op_ywire(x, y, p):
         return y
 
     @staticmethod
-    @FuncMark('base')
+    @FuncMark('base', sym_exp=lambda x, y, p: p)
     def op_const(x, y, p):
         return p
 
     @staticmethod
-    @FuncMark('base')
-    def op_const_v(x, y, p):
+    def create_const_v(x, p):
         v = np.empty_like(x)
         v.fill(p)
         return v
 
     @FuncMark('base')
+    def op_const_v(self, x, y, p):
+        return self.create_const_v(x, p)
+
+    @FuncMark('base')
     def op_zeros(self, x, y, p):
-        v = np.empty_like(x)
-        v.fill(0.)
-        return v
+        return self.create_const_v(x, 0.)
 
     @FuncMark('base')
     def op_ones(self, x, y, p):
-        v = np.empty_like(x)
-        v.fill(1.)
-        return v
+        return self.create_const_v(x, 1.)
 
     @FuncMark('base')
     def op_head(self, x, y, p):
@@ -227,37 +228,37 @@ class TensorOperators(Operators):
     @classmethod
     @FuncMark('math', factory=True)
     def op_add(cls):
-        return cls.binary_op_factory(lambda x, y: (x + y)/2.0)
+        return cls.binary_op_factory(lambda a, b: (a + b)/2.0)
 
     @classmethod
     @FuncMark('math', factory=True)
     def op_aminus(cls):
-        return cls.binary_op_factory(lambda x, y: np.abs(x - y)/2.0)
+        return cls.binary_op_factory(lambda a, b: np.abs(a - b)/2.0)
 
     @classmethod
     @FuncMark('math', factory=True)
     def op_mul(cls):
-        return cls.binary_op_factory(lambda x, y: x * y)
+        return cls.binary_op_factory(lambda a, b: a * b)
 
     @classmethod
     @FuncMark('math', factory=True)
     def op_max2(cls):
-        return cls.binary_op_factory(lambda x, y: np.maximum(x, y))
+        return cls.binary_op_factory(lambda a, b: np.maximum(a, b))
 
     @classmethod
     @FuncMark('math', factory=True)
     def op_min2(cls):
-        return cls.binary_op_factory(lambda x, y: np.minimum(x, y))
+        return cls.binary_op_factory(lambda a, b: np.minimum(a, b))
 
     @classmethod
     @FuncMark('math', factory=True)
     def op_lt(cls):
-        return cls.binary_op_factory(lambda x, y: (np.less(x, y)).astype(dtype=np.float))
+        return cls.binary_op_factory(lambda a, b: (np.less(a, b)).astype(dtype=np.float))
 
     @classmethod
     @FuncMark('math', factory=True)
     def op_gt(cls):
-        return cls.binary_op_factory(lambda x, y: (np.greater(x, y)).astype(dtype=np.float))
+        return cls.binary_op_factory(lambda a, b: (np.greater(a, b)).astype(dtype=np.float))
 
     @staticmethod
     @FuncMark('math')
@@ -287,7 +288,7 @@ class TensorOperators(Operators):
     @classmethod
     @FuncMark('math', factory=True)
     def op_sqrtxy(cls):
-        return cls.binary_op_factory(lambda x, y: np.sqrt(np.square(x)+np.square(y))/np.sqrt(2.))
+        return cls.binary_op_factory(lambda a, b: np.sqrt(np.square(a)+np.square(b))/np.sqrt(2.))
 
     @staticmethod
     @FuncMark('math')
@@ -302,7 +303,7 @@ class TensorOperators(Operators):
     @classmethod
     @FuncMark('math', factory=True)
     def op_ypow(cls):
-        return cls.binary_op_factory(lambda x, y: np.power(np.abs(x), np.abs(y)))
+        return cls.binary_op_factory(lambda a, b: np.power(np.abs(a), np.abs(b)))
 
     @staticmethod
     @FuncMark('math')
@@ -448,9 +449,11 @@ class SymbolicInvocation(SymbolicEntity):
 class SymbolicVariable(SymbolicEntity):
     def __init__(self, name):
         self.name = name
+        # TODO declare time step, eg a(0), a(1), ...
+        # the "version" of the variable is so identified
 
     def __str__(self):
-        return 'var(' + self.name + ')'
+        return 'var(\'' + self.name + '\')'
 
     def __repr__(self):
         return self.__str__()
@@ -477,7 +480,7 @@ def exec_symbolically(graph: hgg.Graph, tweaks={}):     # TODO move all to graph
 
 
 class Cell(hgg.Node):
-    SYMBOLIC_TWEAK = 'hg.cgp.symbolic'
+    SYMBOLIC_TWEAK = '__hg__.cgp.symbolic'
 
     def __init__(self, operators: Operators, name=None):
         if not isinstance(operators, Operators):
@@ -513,6 +516,10 @@ class Cell(hgg.Node):
         p = hpopt_config[prefix + '_p']
 
         if bool(hpopt_config.get(self.SYMBOLIC_TWEAK, False)):
+            if hasattr(f, '_hg_cgp_func_mark'):
+                sym_exp_f = f._hg_cgp_func_mark.sym_exp
+                if sym_exp_f is not None:
+                    return sym_exp_f(*direct_inputs, p)
             return SymbolicInvocation(f, direct_inputs + [p])
 
         return f(*direct_inputs, p)
@@ -619,6 +626,8 @@ class RegularGrid:
 
         grid = self.get_grid_coords_list(map(range, shape))
         rows_range = range(shape[0])
+
+        # TODO check grid's input range!
 
         output = hgg.Graph(name=self.name)
         with output.as_default():
