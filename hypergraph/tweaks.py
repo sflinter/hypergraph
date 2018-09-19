@@ -245,17 +245,17 @@ class Permutation(g.Node):
         return input
 
 @export
-def switch(default=None, name=None) -> g.Node:
+def switch(*, default=None, name=None) -> g.Node:
     return Switch(name=name, default=default)
 
 
 @export
-def permutation(size=None, name=None) -> g.Node:
+def permutation(*, size=None, name=None) -> g.Node:
     return Permutation(size=size, name=name)
 
 
 @export
-def tweak(value, default=None, name=None) -> g.Node:
+def tweak(value, *, default=None, name=None) -> g.Node:
     # TODO declare "level", that is, when the tweak is applied (eg. runtime)
     if isinstance(value, Distribution):
         return Sample(distribution=value, name=name, default=default)

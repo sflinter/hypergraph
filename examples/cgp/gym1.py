@@ -29,7 +29,7 @@ history.plot(x='idx', y='best_score')
 plt.show()
 print(history)
 
-print(cgp.exec_symbolically(grid, tweaks=strategy.best))
+print('symbolic execution: ' + str(cgp.exec_symbolically(grid, tweaks=strategy.best)))
 
 while True:
     gymman.test(grid, strategy.best, speed=0.5)

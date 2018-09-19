@@ -525,6 +525,9 @@ class Cell(hgg.Node):
         return f(*direct_inputs, p)
 
 
+# TODO class SetVarOnce(hgg.Node):
+
+
 class RegularGrid:
     """
     Regular grid pattern factory
@@ -652,11 +655,11 @@ class RegularGrid:
                     # TODO different probability for output nodes
 
                     # connect outputs
-                    hgg.output() << output_factory([(tweaks.switch('out_sw_' + str(out_idx)) << connections)
+                    hgg.output() << output_factory([(tweaks.switch(name='out_sw_' + str(out_idx)) << connections)
                                                     for out_idx in range(output_factory.input_size)])
                     if self.feedback:
                         # TODO to be tested!
-                        set_feedback = hgg.set_var('feedback') << (tweaks.switch(name='feeback_sw') << connections)
+                        set_feedback = hgg.set_var('feedback') << (tweaks.switch(name='feedback_sw') << connections)
                         hgg.add_event_handler('exit', set_feedback)
                 else:
                     for i in range(shape[0]):
