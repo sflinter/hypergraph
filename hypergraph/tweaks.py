@@ -26,7 +26,7 @@ class Distribution(ABC):
 class UniformChoice(Distribution):
     # TODO random subset and different probs for each value
 
-    def __init__(self, values=[]):
+    def __init__(self, values=()):
         self.gen = lambda: np.random.choice(list(values))
         super().__init__(space_descriptor={'type': 'categorical', 'size': len(values)})
 

@@ -4,6 +4,7 @@ import itertools
 from contextlib import contextmanager
 from functools import reduce
 from functools import partial as fpartial
+from collections import deque
 import types
 import weakref
 from .utils import export
@@ -796,6 +797,34 @@ def _first_valid(iterable):
 @export
 def first_valid():
     return Lambda(func=_first_valid)
+
+
+class Delay(Node):
+    def __init__(self, units=1, name=None, initializer=None):
+        if not isinstance(units, int):
+            raise ValueError()
+        if units <= 0:
+            raise ValueError()
+        self.units = units
+        self.initializer = initializer
+        super().__init__(name)
+
+    def __call__(self, input, hpopt_config={}):
+        ctx = ExecutionContext.get_default(auto_init=False)
+        var_name = '_' + self.name + '_delay'
+        steps = ctx.get_var_value(graph=self.parent, var=var_name, default=None)
+        # TODO self.units == 1 do not use deque
+        if steps is None:
+            init = self.initializer
+            if init is not None:
+                steps = deque([init(input) for _ in range(self.units)])
+            else:
+                steps = deque([None]*self.units)
+
+            ctx.set_var(graph=self.parent, var=var_name, value=steps)
+        else:
+            steps.append(input)
+            return steps.popleft()
 
 
 class GraphCallback:
