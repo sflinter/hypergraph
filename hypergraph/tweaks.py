@@ -23,6 +23,16 @@ class Distribution(ABC):
 
 
 @export
+class Constant(Distribution):
+    def __init__(self, value):
+        self.value = value
+        super().__init__(space_descriptor={'type': 'categorical', 'size': 1})
+
+    def sample(self):
+        return self.value
+
+
+@export
 class UniformChoice(Distribution):
     # TODO random subset and different probs for each value
 

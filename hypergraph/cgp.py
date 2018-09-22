@@ -511,17 +511,24 @@ def exec_symbolically(graph: hgg.Graph, tweaks={}):     # TODO move all to graph
 class Cell(hgg.Node):
     SYMBOLIC_TWEAK = '__hg__.cgp.symbolic'
 
-    def __init__(self, operators: Operators, name=None):
+    def __init__(self, operators: Operators, op_distr=None, name=None):
         if not isinstance(operators, Operators):
             raise ValueError()
+        if not isinstance(op_distr, (tweaks.Distribution, type(None))):
+            raise ValueError()
+
         self.operators = operators
+        self.op_distr = op_distr
         super().__init__(name)
 
     def get_hpopt_config_ranges(self):
         prefix = self.fully_qualified_name
 
+        f_distr = self.op_distr
+        if f_distr is None:
+            f_distr = tweaks.UniformChoice(values=self.operators.get_ops())
         return {
-            prefix + '_f': tweaks.UniformChoice(values=self.operators.get_ops()),
+            prefix + '_f': f_distr,
             prefix + '_p': tweaks.Uniform(low=-1.0, high=1.0)     # TODO get distribution from operators
         }
 
@@ -592,6 +599,23 @@ class RegularGrid:
         self.backward_length = backward_length
         self.feedback = bool(feedback)
         self.name = name
+        self.custom_cells_op_distr = {}   # key is tuple (i, j)
+
+    def set_cell_op_distr(self, pos, distr):
+        """
+        Set a custom operator distribution for the cell identified by position pos
+        :param pos: A tuple of the form (i, j)
+        :param op: A distribution for the operators (typically a uniform choice) or an operator. In the latter case
+        a Constant distribution is created.
+        :return:
+        """
+        if not isinstance(pos, tuple):
+            raise ValueError()
+        if not isinstance(distr, (tweaks.Distribution, type(None))):
+            distr = tweaks.Constant(distr)
+        if len(pos) != 2:
+            raise ValueError()
+        self.custom_cells_op_distr[pos] = distr
 
     @classmethod
     def get_comp_name(cls, comp, i, j):
@@ -667,8 +691,9 @@ class RegularGrid:
 
             # iterate through the grid
             for i, j in grid:
+                op_distr = self.custom_cells_op_distr.get((i, j))
                 # TODO change permutation into combination! We want to allow this configuration: op(node1, node1)
-                Cell(operators=ops,
+                Cell(operators=ops, op_distr=op_distr,
                      name=cname('c', i, j)) << tweaks.permutation(size=ops.input_count, name=cname('p', i, j))
 
             for j in range(shape[1]+1):
@@ -687,7 +712,6 @@ class RegularGrid:
                     hgg.output() << output_factory([(tweaks.switch(name='out_sw_' + str(out_idx)) << connections)
                                                     for out_idx in range(output_factory.input_size)])
                     if self.feedback:
-                        # TODO to be tested!
                         set_feedback = hgg.set_var('feedback') << (tweaks.switch(name='feedback_sw') << connections)
                         hgg.add_event_handler('exit', set_feedback)
                 else:

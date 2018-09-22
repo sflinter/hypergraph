@@ -12,6 +12,9 @@ class IntOperators(Operators):
     def null_value(self):
         return 0
 
+    def null_like(self, x):
+        return 0
+
     @FuncMark('base')
     def op_const(self, x, y, p):
         return int(np.round(p*self.k))
