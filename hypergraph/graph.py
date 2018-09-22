@@ -799,32 +799,57 @@ def first_valid():
     return Lambda(func=_first_valid)
 
 
-class Delay(Node):
-    def __init__(self, units=1, name=None, initializer=None):
+class SingleValueContainer:
+    def __init__(self, value):
+        self.value = value
+
+
+class DelayProcess:
+    def __init__(self, units=1, graph=None, support_var=None, initializer=None):
         if not isinstance(units, int):
             raise ValueError()
         if units <= 0:
             raise ValueError()
         self.units = units
-        self.initializer = initializer
-        super().__init__(name)
 
-    def __call__(self, input, hpopt_config={}):
+        self.graph = graph
+
+        if support_var is None:
+            support_var = '_delay_' + str(uuid.uuid4())
+        self.support_var = support_var
+
+        self.initializer = initializer
+
+    def __call__(self, input):
         ctx = ExecutionContext.get_default(auto_init=False)
-        var_name = '_' + self.name + '_delay'
-        steps = ctx.get_var_value(graph=self.parent, var=var_name, default=None)
-        # TODO self.units == 1 do not use deque
+        assert ctx is not None
+        var_name = self.support_var
+        steps = ctx.get_var_value(graph=self.graph, var=var_name, default=None)
         if steps is None:
             init = self.initializer
-            if init is not None:
-                steps = deque([init(input) for _ in range(self.units)])
+            if init is None:
+                init = lambda _: None
+            if self.units == 1:
+                steps = SingleValueContainer(init(input))
             else:
-                steps = deque([None]*self.units)
+                # TODO use a list and a head index
+                steps = deque([init(input) for _ in range(self.units)])
 
-            ctx.set_var(graph=self.parent, var=var_name, value=steps)
+            ctx.set_var(graph=self.graph, var=var_name, value=steps)
+
+        if isinstance(steps, SingleValueContainer):
+            output, steps.value = steps.value, input
+            return output
         else:
             steps.append(input)
             return steps.popleft()
+
+
+@export
+def delay(name=None, **kwargs):
+    g = Graph.get_default()
+    p = DelayProcess(graph=g, **kwargs)
+    return call1(p, name)
 
 
 class GraphCallback:

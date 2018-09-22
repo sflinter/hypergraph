@@ -7,13 +7,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import time
 
+mode_delay = True   # when delay operators enabled feedback is disabled
 op = cgp.TensorOperators()
+if mode_delay:
+    cgp.DelayOperators(parent=op)
 
 env = gym.make('CartPole-v1')
 gymman = gym_adapter.GymManager(env, max_steps=250, trials_per_individual=3, action_prob=1.)
 
 grid = cgp.RegularGrid(shape=(5, 5), **gymman.get_cgp_net_factory_config(),
-                       operators=op, backward_length=3, feedback=True, name='cgp')
+                       operators=op, backward_length=3, feedback=not mode_delay, name='cgp')
 # TODO fix error when row_count*backward_length<2
 
 grid = grid()

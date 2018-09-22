@@ -85,6 +85,32 @@ class FuncMark:
         return f
 
 
+class DelayOperators(Operators):
+    def __init__(self, parent: Operators):
+        if not isinstance(parent, Operators):
+            raise ValueError()
+        if parent.input_count <= 0:
+            raise ValueError()
+        super().__init__(input_count=parent.input_count)
+
+        graph = hgg.Graph()     # graph used as relative context for the internal variable storage
+        initializer = parent.null_like
+        self._delay1 = hgg.DelayProcess(graph=graph, units=1, initializer=initializer)
+        self._delay2 = hgg.DelayProcess(graph=graph, units=2, initializer=initializer)
+
+        # install operators into parent
+        parent.op_delay1 = self.op_delay1
+        parent.op_delay2 = self.op_delay2
+
+    @FuncMark('delay')
+    def op_delay1(self, *inputs):
+        return self._delay1(inputs[0])
+
+    @FuncMark('delay')
+    def op_delay2(self, *inputs):
+        return self._delay2(inputs[0])
+
+
 class TensorOperators(Operators):
     clip_params = {'a_min': -1, 'a_max': 1}
 
@@ -129,6 +155,9 @@ class TensorOperators(Operators):
     @property
     def null_value(self):
         return 0.
+
+    def null_like(self, x):
+        return self.create_const_v(x, 0.)
 
     @staticmethod
     def to_scalar(value):
