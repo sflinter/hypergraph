@@ -709,8 +709,10 @@ class RegularGrid:
                     # TODO different probability for output nodes
 
                     # connect outputs
-                    hgg.output() << output_factory([(tweaks.switch(name='out_sw_' + str(out_idx)) << connections)
-                                                    for out_idx in range(output_factory.input_size)])
+                    output1 = [(tweaks.switch(name='out_sw_' + str(out_idx)) << connections)
+                               for out_idx in range(output_factory.input_size)]
+                    output1 = hgg.call1(output_factory) << output1
+                    hgg.output() << output1
                     if self.feedback:
                         set_feedback = hgg.set_var('feedback') << (tweaks.switch(name='feedback_sw') << connections)
                         hgg.add_event_handler('exit', set_feedback)
