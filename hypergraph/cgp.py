@@ -662,7 +662,8 @@ class RegularGrid:
             hgg.var('feedback', initial_value=ops.null_value)
 
         def gen_extra_inputs(real_input_count):
-            extra = [ops.null_value for _ in range(max(0, ops.input_count - (real_input_count + self.feedback)))]
+            total_input_count = real_input_count + self.feedback
+            extra = [ops.null_value for _ in range(max(0, ops.input_count - total_input_count))]
             if self.feedback:
                 extra += [hgg.var('feedback')]
             return extra

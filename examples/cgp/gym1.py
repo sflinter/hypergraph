@@ -26,7 +26,8 @@ if mode_delay:
 grid = grid()
 grid.dump()
 
-strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10*10**3)
+strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10*10**3,
+                                   target_score=250)
 strategy()
 print("best:" + str(strategy.best))
 

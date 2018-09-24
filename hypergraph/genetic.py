@@ -1,6 +1,7 @@
 import numpy as np
 from . import graph as hgg
 from . import tweaks
+import numbers
 
 
 class GeneticBase:
@@ -112,7 +113,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
     1+lambda evolutionary strategy
     """
 
-    def __init__(self, graph: hgg.Graph, fitness, *, opt_mode='max', lambda_=4, generations=10**4):
+    def __init__(self, graph: hgg.Graph, fitness, *, opt_mode='max', lambda_=4, generations=10**4, target_score=None):
         # TODO callback
         # TODO validate params
         if opt_mode not in ['min', 'max']:
@@ -125,6 +126,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
         super().__init__(graph=graph)
         self.parent = None
         self.parent_score = None
+        self.target_score = None if target_score is None else float(target_score)
         self.history = None
 
     def reset(self):
@@ -146,6 +148,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
         parent = self.parent
         parent_score = self.parent_score
+        target_score = self.target_score
         fitness = self.fitness
         opt_mode = self.opt_mode
 
@@ -182,6 +185,10 @@ class MutationOnlyEvoStrategy(GeneticBase):
             if hit:
                 # TODO move to a specific callback
                 self.history.generations.append({'idx': c, 'best_score': parent_score}) # TODO include datetime
+                if target_score is not None:
+                    if score_cmp(parent_score, target_score):
+                        print("*** target score achieved ***")
+                        break
 
             if c % 100 == 0:
                 # TODO move to a specific callback
