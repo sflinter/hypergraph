@@ -108,6 +108,43 @@ class History:  # TODO callback
         self.generations = []
 
 
+class TournamentSelection:
+    def __init__(self, k=2, p=0.95):
+        """
+        Init tournament selection algorithm
+        :param k: the arity of the selection
+        :param p: the probability of the selection
+        """
+
+        if not isinstance(k, int):
+            raise ValueError()
+        if k <= 0:
+            raise ValueError()
+        self.k = k
+
+        p = float(p)
+        if p <= 0. or p > 1.:
+            raise ValueError()
+        self.p = p
+
+    def select(self, fitness_ordered_pop):
+        """
+        Perform a tournament selection on the provided population. The population ust be ordered by decreasing
+        score (thus the best individual is the first).
+        :param fitness_ordered_pop:
+        :return:
+        """
+        if len(fitness_ordered_pop) <= self.k:
+            return fitness_ordered_pop[0]
+
+        idxs_subset = sorted([np.random.randint(len(fitness_ordered_pop)) for _ in range(self.k)])
+        # generate k random uniform numbers on [0,1] and check which is less than p, hence
+        # return the index of the first.
+        idx = np.argmax(np.random.uniform(0, 1, self.k) < self.p)   # idx relative to idxs_subset
+        idx = idxs_subset[idx]
+        return fitness_ordered_pop[idx]
+
+
 class MutationOnlyEvoStrategy(GeneticBase):
     """
     1+lambda evolutionary strategy
