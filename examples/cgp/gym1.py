@@ -4,10 +4,14 @@ from hypergraph.genetic import MutationOnlyEvoStrategy
 from hypergraph_test import gym_adapter
 import gym
 import pandas as pd
-import matplotlib.pyplot as plt
 import time
 
 mode_delay = True   # when delay operators enabled feedback is disabled
+graphics_enabled = True
+
+if graphics_enabled:
+    import matplotlib.pyplot as plt
+
 op = cgp.TensorOperators()
 if mode_delay:
     cgp.DelayOperators(parent=op)
@@ -33,12 +37,14 @@ print("best:" + str(strategy.best))
 
 history = pd.DataFrame(strategy.history.generations)
 # history.set_index('idx')
-history.plot(x='idx', y='best_score')
-plt.show()
+if graphics_enabled:
+    history.plot(x='idx', y='best_score')
+    plt.show()
 print(history)
 
 print('symbolic execution: ' + str(cgp.exec_symbolically(grid, tweaks=strategy.best)))
 
-while True:
-    gymman.test(grid, strategy.best, speed=0.5)
-    time.sleep(1)
+if graphics_enabled:
+    while True:
+        gymman.test(grid, strategy.best, speed=0.5)
+        time.sleep(1)

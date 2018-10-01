@@ -93,6 +93,8 @@ class GeneticBase:
         :return: The individual
         """
 
+        if isinstance(individual, Individual):
+            individual = individual.gene
         individual = dict(individual)
         phe = self.phenotype
         gene_keys = np.array(list(phe.keys()))
@@ -109,7 +111,7 @@ class History:  # TODO callback
 
 
 class TournamentSelection:
-    def __init__(self, k=2, p=0.95):
+    def __init__(self, k=4, p=0.99):
         """
         Init tournament selection algorithm
         :param k: the arity of the selection
@@ -129,7 +131,7 @@ class TournamentSelection:
 
     def select(self, fitness_ordered_pop):
         """
-        Perform a tournament selection on the provided population. The population ust be ordered by decreasing
+        Perform a tournament selection on the provided population. The population must be ordered by decreasing
         score (thus the best individual is the first).
         :param fitness_ordered_pop:
         :return: The index of the selected individual
@@ -152,9 +154,10 @@ class Individual:
     and the score associated with this individual.
     """
 
-    def __init__(self, gene, score=None):
+    def __init__(self, gene, score=None, gen_id=None):
         self.gene = gene
         self.score = score
+        self.gen_id = gen_id
 
     @staticmethod
     def get_scores(population):
@@ -165,7 +168,7 @@ class Individual:
         return map(lambda p: p.gene, population)
 
     def copy(self):
-        return Individual(gene=dict(self.gene), score=self.score)
+        return Individual(gene=dict(self.gene), score=self.score, gen_id=self.gen_id)
 
 
 class MutationOnlyEvoStrategy(GeneticBase):
@@ -174,7 +177,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
     """
 
     def __init__(self, graph: hgg.Graph, fitness, *,
-                 opt_mode='max', mutation_prob=0.1,
+                 opt_mode='max', mutation_prob=(0.1, 0.8),
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
                  selector=TournamentSelection()):
         # TODO callback
@@ -189,18 +192,19 @@ class MutationOnlyEvoStrategy(GeneticBase):
         self.lambda_ = lambda_
         self.elitism = elitism
         self.generations = generations
+        self.target_score = None if target_score is None else float(target_score)
         self.selector = selector
         super().__init__(graph=graph)
 
         self.population = None
+        self.last_gen_id = -1
         self._best = None
-        self.target_score = None if target_score is None else float(target_score)
         self.history = None
 
     def reset(self):
         self.population = None
+        self.last_gen_id = -1
         self._best = None
-
         self.history = History()
 
     @property
@@ -217,10 +221,12 @@ class MutationOnlyEvoStrategy(GeneticBase):
         for p in population:
             p.score = fitness(p.gene)
 
-    def _create_parent_offspring(self, parent):
+    def _create_parent_offspring(self, parent, gen_id=None):
         p = self.mutation_prob
-        l = self.lambda_
-        return [Individual(self.mutations(parent.gene, prob=p)) for _ in range(l)]
+        if isinstance(p, tuple):
+            p = np.random.uniform(p[0], p[1])
+        return [Individual(self.mutations(parent, prob=p), gen_id=gen_id)
+                for _ in range(self.lambda_)]
 
     def __call__(self):
         self.reset()
@@ -257,13 +263,18 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
         # create initial population
         if population is None:
-            population = [Individual(p) for p in self.create_population(size=self.population_size)]
+            # TODO if we restart then we need the id of the previous generation
+            gen_id = self.last_gen_id + 1
+            population = [Individual(p, gen_id=gen_id) for p in self.create_population(size=self.population_size)]
             self._apply_fitness(population)
             population = apply_perm(population, sort_op(Individual.get_scores(population)))
+            self.population = population
+            self.last_gen_id = gen_id
 
-        for c in range(self.generations):
+        base_gen_id = self.last_gen_id + 1
+        for c in range(base_gen_id, base_gen_id+self.generations):
             # create new offspring
-            offspring = itertools.chain(*[self._create_parent_offspring(parent) for parent in population])
+            offspring = itertools.chain(*[self._create_parent_offspring(parent, gen_id=c) for parent in population])
             offspring = list(offspring)
             self._apply_fitness(offspring)
             offspring.extend(population[:self.elitism])     # preserve the best parents
@@ -278,6 +289,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
                 # TODO in certain cases we may have an infinite loop...
             population = apply_perm(offspring, sorted(selection))
             self.population = population
+            self.last_gen_id = c
             # TODO check order
             del offspring
 
