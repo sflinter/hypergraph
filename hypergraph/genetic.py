@@ -111,7 +111,7 @@ class History:  # TODO callback
 
 
 class TournamentSelection:
-    def __init__(self, k=4, p=0.99):
+    def __init__(self, k=4, p=0.95):
         """
         Init tournament selection algorithm
         :param k: the arity of the selection
@@ -224,8 +224,10 @@ class MutationOnlyEvoStrategy(GeneticBase):
     def _create_parent_offspring(self, parent, gen_id=None):
         p = self.mutation_prob
         if isinstance(p, tuple):
-            p = np.random.uniform(p[0], p[1])
-        return [Individual(self.mutations(parent, prob=p), gen_id=gen_id)
+            pf = lambda: np.random.uniform(p[0], p[1])
+        else:
+            pf = lambda: p
+        return [Individual(self.mutations(parent, prob=pf()), gen_id=gen_id)
                 for _ in range(self.lambda_)]
 
     def __call__(self):

@@ -19,6 +19,9 @@ def export(f):
 
 
 class StructFactory:
+    # TODO create new output_factory where the scaling (and some tweaks) are included in one single component
+    # the new OutputFactory (or StructFactory) should be a Node!
+
     """
     Generic struct factory given a list of values (iterable)
     """

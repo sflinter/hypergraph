@@ -164,7 +164,9 @@ class TensorOperators(Operators):
         value = np.array(value)
         if np.shape(value) != ():
             value = value.flat
-            value = 0 if len(value) == 0 else value[0]
+            value = 0 if len(value) == 0 else np.mean(value)    # previous version: value[0]
+            # TODO various options possible here: value[0], max, mean, ...
+            # TODO this shuold be a tweak!
         return np.float(value)
 
     @staticmethod
@@ -569,7 +571,7 @@ class RegularGrid:
     Regular grid pattern factory
     """
 
-    def __init__(self, input_range, shape, output_factory: StructFactory,
+    def __init__(self, input_range, shape, output_factory: StructFactory,   # TODO tweaks for output_factory
                  operators: Operators, backward_length=1, feedback=False, name=None):
         """
         Init the network factory

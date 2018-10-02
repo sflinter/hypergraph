@@ -62,13 +62,18 @@ class BoxAdapter(ValueAdapter):
         return value
 
     def to_gym(self, value):
-        raise NotImplemented()
+        space = self.space
+        value = list(map(cgp.TensorOperators.to_scalar, value))
+        value = np.array(value, dtype=np.float)
+        value = (value + 1.)*(space.high - space.low)/2. + space.low
+        return value.reshape(space.shape)
 
     def create_graph_input_range(self):
         return None
 
     def create_graph_output_factory(self):
-        raise NotImplemented()
+        # TODO create new output_factory, see note on StructFactory
+        return hg_utils.ListFactory(size=np.array(self.space.shape).prod())
 
 
 class GymManager:
