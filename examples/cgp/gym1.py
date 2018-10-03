@@ -25,7 +25,8 @@ grid = cgp.RegularGrid(shape=(5, 5), **gymman.get_cgp_net_factory_config(),
 if mode_delay:
     # We force the cell (1, 1) to a custom distribution of delay operators only
     #grid.set_cell_op_distr((1, 1), tweaks.UniformChoice([op.op_delay1, op.op_delay2]))
-    grid.set_cell_op_distr((1, 1), op.op_delay1)
+    #grid.set_cell_op_distr((1, 1), op.op_delay1)
+    pass
 
 grid = grid()
 grid.dump()

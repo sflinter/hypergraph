@@ -27,7 +27,7 @@ class StructFactory:
     """
 
     def __init__(self, input_size=None):
-        if not isinstance(input_size, (int, None)):
+        if not isinstance(input_size, (int, type(None))):
             raise ValueError()
         if input_size < 0:
             raise ValueError()
@@ -56,7 +56,7 @@ class SequentialDictFactory(StructFactory):
 
 
 class ListFactory(StructFactory):
-    def __init__(self, size=None):
+    def __init__(self, size):
         super().__init__(input_size=size)
 
     def __call__(self, values):

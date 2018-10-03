@@ -73,7 +73,7 @@ class BoxAdapter(ValueAdapter):
 
     def create_graph_output_factory(self):
         # TODO create new output_factory, see note on StructFactory
-        return hg_utils.ListFactory(size=np.array(self.space.shape).prod())
+        return hg_utils.ListFactory(size=int(np.array(self.space.shape).prod()))
 
 
 class GymManager:
