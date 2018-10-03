@@ -2,9 +2,23 @@ import hypergraph as hg
 from hypergraph import cgp, tweaks
 from hypergraph.genetic import MutationOnlyEvoStrategy
 from hypergraph_test import gym_adapter
+import hypergraph.utils
 import gym
+import tempfile
+import os
+import uuid
 import pandas as pd
 import time
+import pickle
+
+
+def save_model(obj):
+    obj = hypergraph.utils.serializable_form(obj)
+    f = os.path.join(tempfile.gettempdir(), 'cgp-' + str(uuid.uuid4()))
+    with open(f, 'w') as outs:
+        pickle.dump(obj, outs)
+    print("Model saved, file: " + str(f))
+
 
 mode_delay = True   # when delay operators enabled feedback is disabled
 graphics_enabled = True
@@ -35,6 +49,7 @@ strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), ge
                                    target_score=250)
 strategy()
 print("best:" + str(strategy.best))
+#save_model(strategy.best)
 
 history = pd.DataFrame(strategy.history.generations)
 # history.set_index('idx')

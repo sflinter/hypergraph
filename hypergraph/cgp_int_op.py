@@ -4,9 +4,12 @@ import math
 
 
 class IntOperators(Operators):
+    SERIALIZER_TYPE = 'hg.cgp.int_ops.op'
+
     def __init__(self, k=64):
         self.k = int(k)
         super().__init__(input_count=2)
+        self._install_op_serializers(self.SERIALIZER_TYPE)
 
     @property
     def null_value(self):

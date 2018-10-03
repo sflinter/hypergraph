@@ -18,6 +18,19 @@ def export(f):
     return f
 
 
+def serializable_form(obj):
+    if not isinstance(obj, dict):
+        raise ValueError()
+    # TODO support generic structure
+    output = {}
+    for key, value in obj.items():
+        pass
+        if hasattr(value, '_hg_serializer_descriptor'):
+            value = getattr(value, '_hg_serializer_descriptor')
+        output[key] = value
+    return output
+
+
 class StructFactory:
     # TODO create new output_factory where the scaling (and some tweaks) are included in one single component
     # the new OutputFactory (or StructFactory) should be a Node!

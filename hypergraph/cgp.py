@@ -2,6 +2,8 @@ import numpy as np
 from functools import partial
 import itertools
 import collections
+import uuid
+import types
 from abc import ABC
 from . import graph as hgg
 from . import tweaks
@@ -18,6 +20,21 @@ class Operators(ABC):
         self._input_count = input_count
         self.include = None
         self.exclude = None
+        self._obj_id = str(uuid.uuid4())  # used by serializer
+
+    def _install_op_serializers(self, ser_type):
+        """
+        Install serializer descriptor on operators. This is an internal function.
+        :param ser_type: The identification of the serializer
+        :return:
+        """
+        ops = self.get_ops()
+        for f in ops:
+            if isinstance(f, types.MethodType):
+                f = f.__func__
+            if isinstance(f, types.FunctionType):
+                v = {'__hg_ser_type__': ser_type, 'op': f.__name__, 'parent': self._obj_id}
+                setattr(f, '_hg_serializer_descriptor', v)
 
     @property
     def input_count(self):
@@ -86,6 +103,8 @@ class FuncMark:
 
 
 class DelayOperators(Operators):
+    SERIALIZER_TYPE = 'hg.cgp.delay_ops.op'
+
     def __init__(self, parent: Operators):
         if not isinstance(parent, Operators):
             raise ValueError()
@@ -102,6 +121,8 @@ class DelayOperators(Operators):
         parent.op_delay1 = self.op_delay1
         parent.op_delay2 = self.op_delay2
 
+        self._install_op_serializers(self.SERIALIZER_TYPE)
+
     @FuncMark('delay')
     def op_delay1(self, *inputs):
         return self._delay1(inputs[0])
@@ -113,12 +134,14 @@ class DelayOperators(Operators):
 
 class TensorOperators(Operators):
     clip_params = {'a_min': -1, 'a_max': 1}
+    SERIALIZER_TYPE = 'hg.cgp.tensor_ops.op'
 
     def __init__(self, default_axis=-1):
         if default_axis not in (0, -1):
             raise ValueError()
         self.default_axis = default_axis
         super().__init__(input_count=2)
+        self._install_op_serializers(self.SERIALIZER_TYPE)
 
     def test_ops(self, trials=10**7):
         ops = list(self.get_ops())
