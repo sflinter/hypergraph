@@ -15,7 +15,7 @@ import pickle
 def save_model(obj):
     obj = hypergraph.utils.serializable_form(obj)
     f = os.path.join(tempfile.gettempdir(), 'cgp-' + str(uuid.uuid4()))
-    with open(f, 'w') as outs:
+    with open(f, 'wb') as outs:
         pickle.dump(obj, outs)
     print("Model saved, file: " + str(f))
 
@@ -49,7 +49,7 @@ strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), ge
                                    target_score=250)
 strategy()
 print("best:" + str(strategy.best))
-#save_model(strategy.best)
+save_model(strategy.best)
 
 history = pd.DataFrame(strategy.history.generations)
 # history.set_index('idx')

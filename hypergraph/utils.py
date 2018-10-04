@@ -19,6 +19,7 @@ def export(f):
 
 
 def serializable_form(obj):
+    # TODO create deserializer, use graph to connect parent -> children dependencies
     if not isinstance(obj, dict):
         raise ValueError()
     # TODO support generic structure

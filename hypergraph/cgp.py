@@ -53,15 +53,6 @@ class Operators(ABC):
         ops = filter(lambda n: n.startswith('op_'), dir(self))
         ops = map(lambda n: getattr(self, n), ops)
 
-        def run_func_factory(f):
-            if hasattr(f, '_hg_cgp_func_mark'):
-                desc = f._hg_cgp_func_mark
-                if desc.factory:
-                    ret = f()
-                    ret.__name__ = f.__name__
-                    return ret
-            return f
-
         def check_inc(f, *, include):
             if f.__name__ in include:
                 return True
@@ -76,7 +67,7 @@ class Operators(ABC):
         if exclude is not None:
             ops = filter(lambda f: not check_inc(f, include=exclude), ops)
 
-        ops = list(map(run_func_factory, ops))
+        ops = list(ops)
         if len(ops) == 0:
             raise RuntimeError("The selected operator list is empty")
         return ops
@@ -87,13 +78,12 @@ class FuncMark:
     A decorator to mark a function factory for the CGP' node.
     """
 
-    def __init__(self, group: str=None, *, factory: bool=False, sym_exp=None):
+    def __init__(self, group: str=None, *, sym_exp=None):
         """
         Init func factory
-        :param factory: boolean, when true the function is an operator factory that returns an operator or a list of them.
+        :param group: Name of the group that this operator belongs
         :param sym_exp: a custom function to be used for symbolic expansion
         """
-        self.factory = factory
         self.group = group
         self.sym_exp = sym_exp
 
@@ -268,51 +258,49 @@ class TensorOperators(Operators):
     #    return self.default_value
 
     @staticmethod
-    def binary_op_factory(op):
-        def f(x, y, p):
-            isarray = map(lambda v: isinstance(v, np.ndarray), (x, y))
-            if all(isarray):
-                min_dim = np.minimum(len(x.shape), len(y.shape))
-                shape = np.minimum(x.shape[-min_dim:], y.shape[-min_dim:])
-                shape = [...] + list(map(slice, shape))
-                x, y = x[shape], y[shape]
-            return op(x, y)
-        return f
+    def binary_op(op, x, y):
+        isarray = map(lambda v: isinstance(v, np.ndarray), (x, y))
+        if all(isarray):
+            min_dim = np.minimum(len(x.shape), len(y.shape))
+            shape = np.minimum(x.shape[-min_dim:], y.shape[-min_dim:])
+            shape = [...] + list(map(slice, shape))
+            x, y = x[shape], y[shape]
+        return op(x, y)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_add(cls):
-        return cls.binary_op_factory(lambda a, b: (a + b)/2.0)
+    @FuncMark('math')
+    def op_add(cls, x, y, p):
+        return cls.binary_op(lambda a, b: (a + b)/2.0, x, y)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_aminus(cls):
-        return cls.binary_op_factory(lambda a, b: np.abs(a - b)/2.0)
+    @FuncMark('math')
+    def op_aminus(cls, x, y, p):
+        return cls.binary_op(lambda a, b: np.abs(a - b)/2.0, x, y)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_mul(cls):
-        return cls.binary_op_factory(lambda a, b: a * b)
+    @FuncMark('math')
+    def op_mul(cls, x, y, p):
+        return cls.binary_op(lambda a, b: a * b, x, y)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_max2(cls):
-        return cls.binary_op_factory(lambda a, b: np.maximum(a, b))
+    @FuncMark('math')
+    def op_max2(cls, x, y, p):
+        return cls.binary_op(lambda a, b: np.maximum(a, b), x, y)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_min2(cls):
-        return cls.binary_op_factory(lambda a, b: np.minimum(a, b))
+    @FuncMark('math')
+    def op_min2(cls, x, y, p):
+        return cls.binary_op(lambda a, b: np.minimum(a, b), x, y)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_lt(cls):
-        return cls.binary_op_factory(lambda a, b: (np.less(a, b)).astype(dtype=np.float))
+    @FuncMark('math')
+    def op_lt(cls, x, y, p):
+        return cls.binary_op(lambda a, b: (np.less(a, b)).astype(dtype=np.float), x, y)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_gt(cls):
-        return cls.binary_op_factory(lambda a, b: (np.greater(a, b)).astype(dtype=np.float))
+    @FuncMark('math')
+    def op_gt(cls, x, y, p):
+        return cls.binary_op(lambda a, b: (np.greater(a, b)).astype(dtype=np.float), x, y)
 
     @staticmethod
     @FuncMark('math')
@@ -340,9 +328,9 @@ class TensorOperators(Operators):
         return np.floor(x)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_sqrtxy(cls):
-        return cls.binary_op_factory(lambda a, b: np.sqrt(np.square(a)+np.square(b))/np.sqrt(2.))
+    @FuncMark('math')
+    def op_sqrtxy(cls, x, y, p):
+        return cls.binary_op(lambda a, b: np.sqrt(np.square(a)+np.square(b))/np.sqrt(2.), x, y)
 
     @staticmethod
     @FuncMark('math')
@@ -355,9 +343,9 @@ class TensorOperators(Operators):
         return np.power(np.abs(x), p + 1)
 
     @classmethod
-    @FuncMark('math', factory=True)
-    def op_ypow(cls):
-        return cls.binary_op_factory(lambda a, b: np.power(np.abs(a), np.abs(b)))
+    @FuncMark('math')
+    def op_ypow(cls, x, y, p):
+        return cls.binary_op(lambda a, b: np.power(np.abs(a), np.abs(b)), x, y)
 
     @staticmethod
     @FuncMark('math')
