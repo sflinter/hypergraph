@@ -35,6 +35,7 @@ class ValueAdapter(abc.ABC):
 
 class DiscreteAdapter(ValueAdapter):
     def __init__(self, space: gym.spaces.Discrete):
+        print("gym space:" + str(space))
         self.space = space
 
     def from_gym(self, value):
@@ -53,13 +54,16 @@ class DiscreteAdapter(ValueAdapter):
 
 class BoxAdapter(ValueAdapter):
     def __init__(self, space: gym.spaces.Box):
+        print("gym space:" + str(space) + ", low=" + str(space.low) + ", high=" + str(space.high))
         self.space = space
 
     def from_gym(self, value):
-        space = self.space
-        value = (np.array(value, dtype=np.float) - space.low) / (space.high - space.low)
-        value = (value * 2.) - 1.
-        return value
+        return np.tanh(value)
+
+        #space = self.space
+        #value = (np.array(value, dtype=np.float) - space.low) / (space.high - space.low)
+        #value = (value * 2.) - 1.
+        #return value
 
     def to_gym(self, value):
         space = self.space

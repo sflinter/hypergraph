@@ -43,7 +43,7 @@ if mode_delay:
     pass
 
 grid = grid()
-grid.dump()
+# grid.dump()
 
 strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=100*10**3,
                                    target_score=250)
