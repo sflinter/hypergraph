@@ -19,6 +19,8 @@ def export(f):
 
 
 def serializable_form(obj):
+    # TODO use a graph that emits a serialized format, save with msgpack or yaml.
+    # TODO pass a SerializerContext
     # TODO create deserializer, use graph to connect parent -> children dependencies
     if not isinstance(obj, dict):
         raise ValueError()

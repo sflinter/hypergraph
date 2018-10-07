@@ -21,7 +21,7 @@ class ValueAdapter(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def create_graph_output_factory(self):
+    def get_graph_output_size(self):
         pass
 
     @staticmethod
@@ -48,8 +48,8 @@ class DiscreteAdapter(ValueAdapter):
     def create_graph_input_range(self):
         return None
 
-    def create_graph_output_factory(self):
-        return hg_utils.SingleValueStructFactory()
+    def get_graph_output_size(self):
+        return None
 
 
 class BoxAdapter(ValueAdapter):
@@ -75,9 +75,8 @@ class BoxAdapter(ValueAdapter):
     def create_graph_input_range(self):
         return None
 
-    def create_graph_output_factory(self):
-        # TODO create new output_factory, see note on StructFactory
-        return hg_utils.ListFactory(size=int(np.array(self.space.shape).prod()))
+    def get_graph_output_size(self):
+        return int(np.array(self.space.shape).prod())
 
 
 class GymManager:
@@ -128,6 +127,7 @@ class GymManager:
                 total_reward += reward
                 if done:
                     break
+        print('Test episode concluded, total_reward={}'.format(total_reward))
 
     def get_cgp_net_factory_config(self) -> dict:
         """
@@ -136,7 +136,7 @@ class GymManager:
         """
         return {
             'input_range': self.adapters[0].create_graph_input_range(),
-            'output_factory': self.adapters[1].create_graph_output_factory()
+            'output_size': self.adapters[1].get_graph_output_size()
         }
 
     def create_fitness(self, graph: hg.Graph):

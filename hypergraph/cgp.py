@@ -133,6 +133,10 @@ class TensorOperators(Operators):
         super().__init__(input_count=2)
         self._install_op_serializers(self.SERIALIZER_TYPE)
 
+        # operators to be applied to each output, usually aggregators used to transform tensor of vector
+        # values to scalars
+        self.output_ops = [self.op_max1, self.op_mean]
+
     def test_ops(self, trials=10**7):
         ops = list(self.get_ops())
         shape_dim_count_max = 3
@@ -582,13 +586,13 @@ class RegularGrid:
     Regular grid pattern factory
     """
 
-    def __init__(self, input_range, shape, output_factory: StructFactory,   # TODO tweaks for output_factory
-                 operators: Operators, backward_length=1, feedback=False, name=None):
+    def __init__(self, input_range, shape, operators: Operators,
+                 output_size=None, backward_length=1, feedback=False, name=None):
         """
         Init the network factory
         :param input_range: A list of keys of a range
         :param shape:
-        :param output_factory:
+        :param output_size: The number of outputs or None if the graph's output is connected directly to the grid
         :param operators:
         :param backward_length:
         :param feedback: When true a feedback connection is created
@@ -607,7 +611,7 @@ class RegularGrid:
 
         self.input_range = input_range
         self.shape = shape
-        self.output_factory = output_factory
+        self.output_size = output_size
         self.operators = operators
         self.backward_length = backward_length
         self.feedback = bool(feedback)
@@ -615,6 +619,7 @@ class RegularGrid:
         self.custom_cells_op_distr = {}   # key is tuple (i, j)
 
     def set_cell_op_distr(self, pos, distr):
+        # TODO param with cell_type? This would be useful for output nodes
         """
         Set a custom operator distribution for the cell identified by position pos
         :param pos: A tuple of the form (i, j)
@@ -687,12 +692,15 @@ class RegularGrid:
         # we assure that we have at least ops.input_count inputs
         return [hgg.input_all()] + gen_extra_inputs(1)
 
+    def _pad_cell_input(self, v):
+        ops = self.operators
+        return v + [ops.null_value]*(ops.input_count-len(v))
+
     def __call__(self):
         ops = self.operators
         cname = self.get_comp_name
         shape = self.shape
         backward_length = self.backward_length
-        output_factory = self.output_factory
 
         grid = self.get_grid_coords_list(map(range, shape))
         rows_range = range(shape[0])
@@ -720,12 +728,21 @@ class RegularGrid:
                 connections += map(hgg.node_ref, self.get_comp_name('c', rows_range, range(j0, j)))
 
                 if j == shape[1]:
-                    # TODO different probability for output nodes
+                    output_size = self.output_size
+                    output_size = 1 if output_size is None else output_size
 
                     # connect outputs
+                    # TODO different probability for output nodes, assign these to a specific group
                     output1 = [(tweaks.switch(name='out_sw_' + str(out_idx)) << connections)
-                               for out_idx in range(output_factory.input_size)]
-                    output1 = hgg.call1(output_factory) << output1
+                               for out_idx in range(output_size)]
+
+                    if hasattr(ops, 'output_ops'):
+                        output_ops_distr = tweaks.UniformChoice(values=ops.output_ops)
+                        output1 = [(Cell(operators=ops, op_distr=output_ops_distr,
+                                         name='out_f_' + str(i1)) << self._pad_cell_input([n])) for i1, n in enumerate(output1)]
+
+                    if self.output_size is None:
+                        output1 = output1[0]
                     hgg.output() << output1
                     if self.feedback:
                         set_feedback = hgg.set_var('feedback') << (tweaks.switch(name='feedback_sw') << connections)
