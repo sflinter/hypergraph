@@ -7,7 +7,6 @@ import types
 from abc import ABC
 from . import graph as hgg
 from . import tweaks
-from .utils import StructFactory
 
 
 class Operators(ABC):
@@ -135,7 +134,7 @@ class TensorOperators(Operators):
 
         # operators to be applied to each output, usually aggregators used to transform tensor of vector
         # values to scalars
-        self.output_ops = [self.op_max1, self.op_mean]
+        self.output_ops = [self.op_max1, self.op_mean, self.op_indexp]  # TODO fix, a tensor can be still the result...
 
     def test_ops(self, trials=10**7):
         ops = list(self.get_ops())

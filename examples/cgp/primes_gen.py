@@ -20,7 +20,7 @@ primes = set([n for n in primes_gen(1024)])
 
 op = cgp_int_op.IntOperators()
 
-grid = cgp.RegularGrid(shape=(1, 5), input_range=None, output_factory=hg_utils.SingleValueStructFactory(),
+grid = cgp.RegularGrid(shape=(1, 5), input_range=None, output_size=1,
                        operators=op, backward_length=3, feedback=True, name='cgp')
 grid = grid()
 grid.dump()
