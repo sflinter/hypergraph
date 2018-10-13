@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 from . import graph as g
-from .utils import export
+from .utils import export, MsgPackEncoders
 import numpy as np
 import copy
 import math
+import msgpack
+
 
 @export
 class Distribution(ABC):
@@ -270,3 +272,19 @@ def tweak(value, *, default=None, name=None) -> g.Node:
     if isinstance(value, Distribution):
         return Sample(distribution=value, name=name, default=default)
     raise ValueError("Input type not supported")
+
+
+class TweaksSerializer:
+    @classmethod
+    def save(cls, obj, stream):
+        if not isinstance(obj, dict):
+            raise ValueError()
+
+        output = {}
+        for key, value in obj.items():
+            pass
+            if hasattr(value, '_hg_tweak_descriptor'):
+                value = getattr(value, '_hg_tweak_descriptor')
+            output[key] = value
+
+        msgpack.pack(output, stream, use_bin_type=True, default=MsgPackEncoders.encode)

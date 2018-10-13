@@ -32,8 +32,8 @@ class Operators(ABC):
             if isinstance(f, types.MethodType):
                 f = f.__func__
             if isinstance(f, types.FunctionType):
-                v = {'__hg_ser_type__': ser_type, 'op': f.__name__, 'parent': self._obj_id}
-                setattr(f, '_hg_serializer_descriptor', v)
+                # v = {'__hg_ser_type__': ser_type, 'op': f.__name__, 'parent': self._obj_id}
+                setattr(f, '_hg_tweak_descriptor', f.__name__)
 
     @property
     def input_count(self):
@@ -43,7 +43,12 @@ class Operators(ABC):
         self.include = include
         self.exclude = exclude
 
-    def get_ops(self):
+    def get_op_by_name(self, name: str):
+        if not name.startswith('op_'):
+            raise ValueError()
+        return getattr(self, name)
+
+    def get_ops(self, *, apply_filters=True):
         """
         Get a list of operators. The operators are methods which name starts with 'op_'. The optional
         decorator FuncMark can be used to specify additional features.
@@ -59,12 +64,13 @@ class Operators(ABC):
                 return f._hg_cgp_func_mark.group in include
             return False
 
-        include = self.include
-        exclude = self.exclude
-        if include is not None:
-            ops = filter(partial(check_inc, include=include), ops)
-        if exclude is not None:
-            ops = filter(lambda f: not check_inc(f, include=exclude), ops)
+        if apply_filters:
+            include = self.include
+            exclude = self.exclude
+            if include is not None:
+                ops = filter(partial(check_inc, include=include), ops)
+            if exclude is not None:
+                ops = filter(lambda f: not check_inc(f, include=exclude), ops)
 
         ops = list(ops)
         if len(ops) == 0:
@@ -548,6 +554,8 @@ class Cell(hgg.Node):
             prefix + '_p': tweaks.Uniform(low=-1.0, high=1.0)     # TODO get distribution from operators
         }
 
+    # TODO call to resolve tweaks from serialized version to operative one
+
     def get_contextual_descriptor(self, desc_ctx):
         ctx = hgg.ExecutionContext.get_default(auto_init=False)
         if ctx is None:
@@ -559,6 +567,13 @@ class Cell(hgg.Node):
                 return f.__name__
         return super().get_contextual_descriptor(desc_ctx)
 
+    def resolve_tweaks(self, tweaks):
+        key = self.fully_qualified_name + '_f'
+        f = tweaks[key]
+        if isinstance(f, str):
+            f = self.operators.get_op_by_name(f)
+            tweaks[key] = f
+
     def __call__(self, input, hpopt_config={}):
         ops = self.operators
         direct_inputs = input[:ops.input_count]
@@ -566,6 +581,8 @@ class Cell(hgg.Node):
         prefix = self.fully_qualified_name
         f = hpopt_config[prefix + '_f']
         p = hpopt_config[prefix + '_p']
+        if not callable(f):
+            raise ValueError()
 
         if bool(hpopt_config.get(self.SYMBOLIC_TWEAK, False)):
             if hasattr(f, '_hg_cgp_func_mark'):

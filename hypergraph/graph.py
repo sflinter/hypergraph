@@ -141,7 +141,7 @@ class Node(ABC):
     def name(self) -> str:
         return self._name
 
-    def get_contextual_descriptor(self, desc_ctx):
+    def get_contextual_descriptor(self, desc_ctx):  # TODO remove
         return None
 
     @property
@@ -182,6 +182,15 @@ class Node(ABC):
         g = self.parent
         assert g is not None
         return g.get_node_input_binding(self)
+
+    def resolve_tweaks(self, tweaks: dict):
+        """
+        Substitute the tweaks values related to this node with operative objects. This function is typically
+        used to deserialize graph's tweaks.
+        :param tweaks:
+        :return:
+        """
+        pass
 
     def get_hpopt_config_ranges(self) -> dict:
         """
@@ -883,6 +892,9 @@ class Subgraph(Node):
     def __call__(self, input, hpopt_config={}):
         return self.graph(input)
 
+    def resolve_tweaks(self, tweaks: dict):
+        self.graph.resolve_tweaks(tweaks)
+
 
 class Dependency:
     """
@@ -1356,6 +1368,10 @@ class Graph:
         if adapter:
             return adapter(obj)
         return obj
+
+    def resolve_tweaks(self, tweaks: dict):
+        for n in self.nodes.values():
+            n.resolve_tweaks(tweaks)
 
 
 @export

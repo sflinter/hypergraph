@@ -2,21 +2,18 @@ import hypergraph as hg
 from hypergraph import cgp, tweaks
 from hypergraph.genetic import MutationOnlyEvoStrategy
 from hypergraph_test import gym_adapter
-import hypergraph.utils
 import gym
 import tempfile
 import os
 import uuid
 import pandas as pd
 import time
-import pickle
 
 
 def save_model(obj):
-    obj = hypergraph.utils.serializable_form(obj)
     f = os.path.join(tempfile.gettempdir(), 'cgp-' + str(uuid.uuid4()))
     with open(f, 'wb') as outs:
-        pickle.dump(obj, outs)
+        tweaks.TweaksSerializer.save(obj, outs)
     print("Model saved, file: " + str(f))
 
 
