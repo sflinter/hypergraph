@@ -500,14 +500,27 @@ class SymbolicInvocation(SymbolicEntity):
 class SymbolicVariable(SymbolicEntity):
     def __init__(self, name):
         self.name = name
+        self.indexes = None
         # TODO declare time step, eg a(0), a(1), ...
         # the "version" of the variable is so identified
 
     def __str__(self):
-        return 'var(\'' + self.name + '\')'
+        output = 'var(\'' + self.name + '\')'
+        if self.indexes is not None:
+            for idx in self.indexes:
+                output += '[' + str(idx) + ']'
+        return output
 
     def __repr__(self):
         return self.__str__()
+
+    def __getitem__(self, key):
+        indexes = self.indexes
+        indexes = () if indexes is None else indexes
+        indexes += (key, )
+        output = SymbolicVariable(self.name)
+        output.indexes = indexes
+        return output
 
 
 def exec_symbolically(graph: hgg.Graph, tweaks={}):     # TODO move all to graph?
@@ -594,7 +607,18 @@ class Cell(hgg.Node):
         return f(*direct_inputs, p)
 
 
-# TODO class SetVarOnce(hgg.Node):
+class Tensor2Inputs:
+    @staticmethod
+    def transform(tensor):
+        if np.shape(tensor) != ():
+            return list(itertools.chain((tensor, ), tensor.flat))
+        return tensor
+
+    @staticmethod
+    def range(shape):
+        if shape != ():
+            return range(1 + np.array(shape).prod())
+        return None
 
 
 class RegularGrid:
@@ -606,8 +630,8 @@ class RegularGrid:
                  output_size=None, backward_length=1, feedback=False, name=None):
         """
         Init the network factory
-        :param input_range: A list of keys of a range
-        :param shape:
+        :param input_range: A list of keys/indexes to be used to index the input variable
+        :param shape: The shape of the cgp grid
         :param output_size: The number of outputs or None if the graph's output is connected directly to the grid
         :param operators:
         :param backward_length:

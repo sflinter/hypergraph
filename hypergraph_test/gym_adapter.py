@@ -58,7 +58,7 @@ class BoxAdapter(ValueAdapter):
         self.space = space
 
     def from_gym(self, value):
-        return np.tanh(value)
+        return cgp.Tensor2Inputs.transform(np.tanh(value))
 
         #space = self.space
         #value = (np.array(value, dtype=np.float) - space.low) / (space.high - space.low)
@@ -73,7 +73,7 @@ class BoxAdapter(ValueAdapter):
         return value.reshape(space.shape)
 
     def create_graph_input_range(self):
-        return None
+        return cgp.Tensor2Inputs.range(self.space.shape)
 
     def get_graph_output_size(self):
         return int(np.array(self.space.shape).prod())
