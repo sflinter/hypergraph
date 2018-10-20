@@ -275,8 +275,8 @@ def tweak(value, *, default=None, name=None) -> g.Node:
 
 
 class TweaksSerializer:
-    @classmethod
-    def save(cls, obj, stream):
+    @staticmethod
+    def save(obj, stream):
         if not isinstance(obj, dict):
             raise ValueError()
 
@@ -288,3 +288,10 @@ class TweaksSerializer:
             output[key] = value
 
         msgpack.pack(output, stream, use_bin_type=True, default=MsgPackEncoders.encode)
+
+    @staticmethod
+    def load(stream, graph=None):
+        tweaks = msgpack.unpack(stream, object_hook=MsgPackEncoders.decode, raw=False)
+        if graph is not None:
+            graph.resolve_tweaks(tweaks)
+        return tweaks

@@ -19,6 +19,7 @@ def save_model(obj):
 
 mode_delay = True   # when delay operators enabled feedback is disabled
 graphics_enabled = True
+model_file = '/tmp/cgp-cfbc255b-6ea2-44fe-86fb-66c7a0f4890c'
 
 if graphics_enabled:
     import matplotlib.pyplot as plt
@@ -42,22 +43,27 @@ if mode_delay:
 grid = grid()
 # grid.dump()
 
-strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=100*10**3,
-                                   target_score=250)
-strategy()
-print("best:" + str(strategy.best))
-save_model(strategy.best)
+if model_file is not None:
+    with open(model_file, 'rb') as ins:
+        model = tweaks.TweaksSerializer.load(ins, graph=grid)
+else:
+    strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=100*10**3,
+                                       target_score=250)
+    strategy()
+    print("best:" + str(strategy.best))
+    save_model(strategy.best)
 
-history = pd.DataFrame(strategy.history.generations)
-# history.set_index('idx')
-if graphics_enabled:
-    history.plot(x='idx', y='best_score')
-    plt.show()
-print(history)
+    history = pd.DataFrame(strategy.history.generations)
+    # history.set_index('idx')
+    if graphics_enabled:
+        history.plot(x='idx', y='best_score')
+        plt.show()
+    print(history)
+    model = strategy.best
 
-print('symbolic execution: ' + str(cgp.exec_symbolically(grid, tweaks=strategy.best)))
+print('symbolic execution: ' + str(cgp.exec_symbolically(grid, tweaks=model)))
 
 if graphics_enabled:
     while True:
-        gymman.test(grid, strategy.best, speed=0.5)
+        gymman.test(grid, model, speed=0.5)
         time.sleep(1)

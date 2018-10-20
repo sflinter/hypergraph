@@ -58,6 +58,7 @@ class BoxAdapter(ValueAdapter):
         self.space = space
 
     def from_gym(self, value):
+        value = np.nan_to_num(value)
         return cgp.Tensor2Inputs.transform(np.tanh(value))
 
         #space = self.space
