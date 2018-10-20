@@ -17,9 +17,11 @@ def save_model(obj):
     print("Model saved, file: " + str(f))
 
 
+# **** Begin of config section ****
 mode_delay = True   # when delay operators enabled feedback is disabled
 graphics_enabled = True
-model_file = '/tmp/cgp-cfbc255b-6ea2-44fe-86fb-66c7a0f4890c'
+model_file = None   # file containing the saved model, when provided the evolutionary strategy is not executed
+# **** End of config section ****
 
 if graphics_enabled:
     import matplotlib.pyplot as plt
