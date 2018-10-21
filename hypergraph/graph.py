@@ -677,6 +677,34 @@ def struct_copy(iterable):
         return iterable
 
 
+class SignatureCheck(Node):
+    """
+    A node that checks a signature serialized in the tweaks. The check is performed when the method
+    resolve_tweaks is invoked. This node act as an identity.
+    """
+
+    def __init__(self, signature, name=None):
+        if not isinstance(signature, str):
+            raise ValueError()
+        self.signature = signature
+        super().__init__(name=name)
+
+    @property
+    def _tweak_name(self):
+        return self.fully_qualified_name + '_value'
+
+    def resolve_tweaks(self, tweaks: dict):
+        sign = tweaks.get(self._tweak_name)
+        if (sign is not None) and sign != self.signature:
+            raise ValueError('Signature tweak mismatch')
+
+    def get_hpopt_config_ranges(self) -> dict:
+        return {self._tweak_name: self.signature}
+
+    def __call__(self, input, hpopt_config={}):
+        return input
+
+
 @export
 class Variable(Node):
     def __init__(self, var_name, initial_value=None):

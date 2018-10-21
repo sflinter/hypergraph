@@ -369,12 +369,13 @@ class TensorOperators(Operators):
     @staticmethod
     @FuncMark('math')
     def op_acos(x, y, p):
-        return np.arccos(x)/np.pi
+        # TODO investigate why sometimes we have values outside the boundaries
+        return np.arccos(np.clip(x, -1., 1.))/np.pi
 
     @staticmethod
     @FuncMark('math')
     def op_asin(x, y, p):
-        return np.arcsin(x)*(2./np.pi)
+        return np.arcsin(np.clip(x, -1., 1.))*(2./np.pi)
 
     @staticmethod
     @FuncMark('math')
@@ -630,7 +631,8 @@ class RegularGrid:
                  output_size=None, backward_length=1, feedback=False, name=None):
         """
         Init the network factory
-        :param input_range: A list of keys/indexes to be used to index the input variable
+        :param input_range: A list of keys/indexes to be used to index the input variable. If None then there is a
+        single input and no subscript is applied
         :param shape: The shape of the cgp grid
         :param output_size: The number of outputs or None if the graph's output is connected directly to the grid
         :param operators:
@@ -749,6 +751,10 @@ class RegularGrid:
 
         output = hgg.Graph(name=self.name)
         with output.as_default():
+            hgg.SignatureCheck(
+                # TODO get signature from operators and input_range
+                signature='{}/{}/{}/{}'.format(*map(str, [shape, backward_length, self.output_size, self.feedback])),
+                name='sign')
             inputs = self.create_inputs()
 
             # iterate through the grid

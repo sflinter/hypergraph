@@ -21,13 +21,19 @@ class GeneticBase:
             phenotype['_internal_placeholder_77177ce9d789'] = tweaks.Uniform()
         self.phenotype = phenotype
 
+    @staticmethod
+    def _sample_distr_tweak(d):
+        if isinstance(d, tweaks.Distribution):
+            return d.sample()
+        return d
+
     def create_population(self, size=None) -> list:
         """
         Create and return a population of individuals.
         :param size: The number of individuals in the population
         :return:
         """
-        sample_f = lambda: dict([(k, d.sample()) for k, d in self.phenotype.items()])
+        sample_f = lambda: dict([(k, self._sample_distr_tweak(d)) for k, d in self.phenotype.items()])
         if size is None:
             return sample_f()
         return [sample_f() for _ in range(size)]
@@ -97,7 +103,12 @@ class GeneticBase:
             individual = individual.gene
         individual = dict(individual)
         phe = self.phenotype
-        gene_keys = np.array(list(phe.keys()))
+
+        # select items with distributions
+        gene_keys = filter(lambda it: isinstance(it[1], tweaks.Distribution), phe.items())
+        gene_keys = map(lambda it: it[0], gene_keys)
+        gene_keys = np.array(list(gene_keys))
+
         selection = np.where(np.random.uniform(size=len(gene_keys)) < prob)
         gene_keys = gene_keys[selection]
         for key in gene_keys:
