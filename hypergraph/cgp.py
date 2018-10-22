@@ -672,7 +672,7 @@ class RegularGrid:
         if not isinstance(pos, tuple):
             raise ValueError()
         if not isinstance(distr, (tweaks.Distribution, type(None))):
-            distr = tweaks.Constant(distr)
+            distr = tweaks.Constant(distr)  # TODO not necessary or when sampling remove instances of this class... see genetic.py
         if len(pos) != 2:
             raise ValueError()
         self.custom_cells_op_distr[pos] = distr
@@ -779,7 +779,7 @@ class RegularGrid:
 
                     # connect outputs
                     # TODO different probability for output nodes, assign these to a specific group
-                    output1 = [(tweaks.switch(name='out_sw_' + str(out_idx)) << connections)
+                    output1 = [(tweaks.switch(name='out_sw_' + str(out_idx), distribution_group='cgp_output') << connections)
                                for out_idx in range(output_size)]
 
                     if hasattr(ops, 'output_ops'):
@@ -791,6 +791,7 @@ class RegularGrid:
                         output1 = output1[0]
                     hgg.output() << output1
                     if self.feedback:
+                        # TODO use distribution_group='cgp_output' here?
                         set_feedback = hgg.set_var('feedback') << (tweaks.switch(name='feedback_sw') << connections)
                         hgg.add_event_handler('exit', set_feedback)
                 else:

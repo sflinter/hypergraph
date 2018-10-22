@@ -11,6 +11,9 @@ import msgpack
 class Distribution(ABC):
     def __init__(self, space_descriptor):
         self._space_descriptor = space_descriptor
+        # The group property is used to assemble different sets of distributions. This is used for example
+        # in cgp to assign different probabilities to different groups of distributions.
+        self.group = None
 
     @abstractmethod
     def sample(self):
@@ -38,9 +41,10 @@ class Constant(Distribution):
 class UniformChoice(Distribution):
     # TODO random subset and different probs for each value
 
-    def __init__(self, values=()):
+    def __init__(self, values=(), group=None):
         self.gen = lambda: np.random.choice(list(values))
         super().__init__(space_descriptor={'type': 'categorical', 'size': len(values)})
+        self.group = group
 
     def sample(self):
         return self.gen()
@@ -84,7 +88,7 @@ def _qround(n, q):
 
 @export
 class QUniform(Distribution):
-    def __init__(self, low=0, high=16, q=1.0, size=None):
+    def __init__(self, low=0, high=16, q=1.0, size=None, group=None):
         if not isinstance(low, int) or not isinstance(high, int):
             raise ValueError()
         if q == 1.0:
@@ -92,6 +96,7 @@ class QUniform(Distribution):
         else:
             self.gen = lambda: int(np.round(np.random.uniform(low=low, high=high, size=size) / q) * q)
         super().__init__(space_descriptor={'type': 'discrete', 'boundaries': (_qround(low, q=q), _qround(high, q=q))})
+        self.group = group
 
     def sample(self):
         return self.gen()
@@ -188,9 +193,10 @@ class Switch(g.Node):
     A node that switches between multiple inputs
     """
 
-    def __init__(self, default=None, name=None):
+    def __init__(self, default=None, name=None, distribution_group=None):
         #TODO allow different probabilities for different inputs
         self.default = default
+        self.distribution_group = distribution_group
         super().__init__(name)
 
     def get_hpopt_config_ranges(self):
@@ -201,9 +207,9 @@ class Switch(g.Node):
             return {}
 
         if isinstance(input_binding, dict):
-            return {self.fully_qualified_name: UniformChoice(input_binding.keys())}
+            return {self.fully_qualified_name: UniformChoice(input_binding.keys(), group=self.distribution_group)}
 
-        return {self.fully_qualified_name: QUniform(high=len(input_binding))}
+        return {self.fully_qualified_name: QUniform(high=len(input_binding), group=self.distribution_group)}
 
     def get_input_binding(self, hpopt_config={}):
         choice = hpopt_config.get(self.fully_qualified_name, self.default)
@@ -257,8 +263,8 @@ class Permutation(g.Node):
         return input
 
 @export
-def switch(*, default=None, name=None) -> g.Node:
-    return Switch(name=name, default=default)
+def switch(*, default=None, name=None, distribution_group=None) -> g.Node:
+    return Switch(name=name, default=default, distribution_group=distribution_group)
 
 
 @export

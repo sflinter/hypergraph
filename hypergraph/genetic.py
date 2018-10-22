@@ -91,25 +91,38 @@ class GeneticBase:
             dict(f(parents[1], keys[0]) + f(parents[0], keys[1]))
         ]
 
-    def mutations(self, individual, prob):
+    def mutations(self, individual, prob, groups_prob=None):
         """
         Apply mutations to the provided individual. Every gene has the same probability of being mutated.
         :param individual:
-        :param prob: Gene mutation probability
+        :param prob: Gene mutation probability, this is the default probability, that is the one applied to
+        groups that don't have a specific value
+        :param groups_prob: A dictionary containing items of the form group_name:prob. This map specifies a custom
+        probability for each declared group. The group name matches the Distribution.group property.
         :return: The individual
         """
+
+        phe = self.phenotype
+
+        def get_custom_prob(key_):
+            g = phe[key_].group
+            return prob if g is None else groups_prob.get(g, prob)
 
         if isinstance(individual, Individual):
             individual = individual.gene
         individual = dict(individual)
-        phe = self.phenotype
 
         # select items with distributions
         gene_keys = filter(lambda it: isinstance(it[1], tweaks.Distribution), phe.items())
         gene_keys = map(lambda it: it[0], gene_keys)
         gene_keys = np.array(list(gene_keys))
 
-        selection = np.where(np.random.uniform(size=len(gene_keys)) < prob)
+        if groups_prob is None:
+            probs = prob
+        else:
+            probs = list(map(get_custom_prob, gene_keys))
+
+        selection = np.where(np.random.uniform(size=len(gene_keys)) < probs)
         gene_keys = gene_keys[selection]
         for key in gene_keys:
             individual[key] = phe[key].sample()
@@ -188,7 +201,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
     """
 
     def __init__(self, graph: hgg.Graph, fitness, *,
-                 opt_mode='max', mutation_prob=(0.1, 0.8),
+                 opt_mode='max', mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
                  selector=TournamentSelection()):
         # TODO callback
@@ -199,6 +212,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
         self.fitness = fitness
         self.opt_mode = opt_mode
         self.mutation_prob = mutation_prob
+        self.mutation_groups_prob = None if mutation_groups_prob is None else dict(mutation_groups_prob)
         self.population_size = population_size
         self.lambda_ = lambda_
         self.elitism = elitism
@@ -234,11 +248,12 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
     def _create_parent_offspring(self, parent, gen_id=None):
         p = self.mutation_prob
+        gp = self.mutation_groups_prob
         if isinstance(p, tuple):
             pf = lambda: np.random.uniform(p[0], p[1])
         else:
             pf = lambda: p
-        return [Individual(self.mutations(parent, prob=pf()), gen_id=gen_id)
+        return [Individual(self.mutations(parent, prob=pf(), groups_prob=gp), gen_id=gen_id)
                 for _ in range(self.lambda_)]
 
     def __call__(self):
