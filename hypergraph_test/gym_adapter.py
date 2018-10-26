@@ -59,6 +59,7 @@ class BoxAdapter(ValueAdapter):
 
     def from_gym(self, value):
         value = np.nan_to_num(value)
+        # TODO provide multiple non-linearities eg: linear+tanh, linear+clip, ...
         return cgp.Tensor2Inputs.transform(np.tanh(value))
 
         #space = self.space
@@ -103,12 +104,15 @@ class GymManager:
         self.trials_per_individual = trials_per_individual
         self.action_prob = action_prob
 
-    def test(self, graph: hg.Graph, individual, *, speed=1.0):
+    def test(self, graph: hg.Graph, individual, *, speed=1.0, single_render_invocation=False):
         env = self.env
         adapters = self.adapters
 
         fps = env.metadata['video.frames_per_second']
         frame_time = 1.0/(fps*speed)
+
+        if single_render_invocation:
+            env.render()
 
         total_reward = 0
         observation = env.reset()
@@ -118,8 +122,10 @@ class GymManager:
         action = None
         with ctx.as_default():
             while True:
-                env.render()
-                time.sleep(frame_time)
+                if not single_render_invocation:
+                    env.render()
+                    time.sleep(frame_time)
+
                 if (not action_valid) or action_prob == 1 or np.random.uniform() <= action_prob:
                     action = graph(input=adapters[0].from_gym(observation))
                     action = adapters[1].to_gym(action)

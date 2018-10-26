@@ -753,6 +753,7 @@ class RegularGrid:
         with output.as_default():
             hgg.SignatureCheck(
                 # TODO get signature from operators and input_range
+                # TODO include a grid generator version
                 signature='{}/{}/{}/{}'.format(*map(str, [shape, backward_length, self.output_size, self.feedback])),
                 name='sign')
             inputs = self.create_inputs()

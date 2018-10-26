@@ -50,7 +50,8 @@ if model_file is not None:
         model = tweaks.TweaksSerializer.load(ins, graph=grid)
 else:
     strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=100*10**3,
-                                       target_score=250, mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6})
+                                       target_score=250, mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6},
+                                       lambda_=9)
     strategy()
     print("best:" + str(strategy.best))
     save_model(strategy.best)

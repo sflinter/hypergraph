@@ -47,6 +47,8 @@ def fitness(individual):
     return reward
 
 
-strategy = MutationOnlyEvoStrategy(grid, fitness=fitness, generations=100*10**3)
+strategy = MutationOnlyEvoStrategy(grid, fitness=fitness, generations=100*10**3,
+                                   mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6},
+                                   lambda_=9)
 strategy()
 print("best:" + str(strategy.best))
