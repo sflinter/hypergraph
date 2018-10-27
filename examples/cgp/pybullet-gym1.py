@@ -1,3 +1,7 @@
+import pybullet as pb
+pb.connect(pb.DIRECT)
+import pybullet_envs
+
 import hypergraph as hg
 from hypergraph import cgp, tweaks
 from hypergraph.genetic import MutationOnlyEvoStrategy
@@ -23,11 +27,14 @@ graphics_enabled = True
 model_file = None   # file containing the saved model, when provided the evolutionary strategy is not executed
 # **** End of config section ****
 
+if graphics_enabled:
+    import matplotlib.pyplot as plt
+
 op = cgp.TensorOperators()
 if mode_delay:
     cgp.DelayOperators(parent=op)
 
-env = gym.make('CartPole-v1')
+env = gym.make('CartPoleBulletEnv-v0')
 gymman = gym_adapter.GymManager(env, max_steps=250, trials_per_individual=3, action_prob=1.)
 
 grid = cgp.RegularGrid(shape=(5, 5), **gymman.get_cgp_net_factory_config(),
@@ -56,7 +63,6 @@ else:
     history = pd.DataFrame(strategy.history.generations)
     # history.set_index('idx')
     if graphics_enabled:
-        import matplotlib.pyplot as plt
         history.plot(x='idx', y='best_score')
         plt.show()
     print(history)
@@ -66,5 +72,5 @@ print('symbolic execution: ' + str(cgp.exec_symbolically(grid, tweaks=model)))
 
 if graphics_enabled:
     while True:
-        gymman.test(grid, model, speed=0.5)
+        gymman.test(grid, model, speed=0.5, single_render_invocation=True)
         time.sleep(1)

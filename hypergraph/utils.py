@@ -34,3 +34,31 @@ class MsgPackEncoders:
         if '__np_int32__' in obj:
             return np.int32(obj['v'])
         return obj
+
+
+class IntBinVecEncoder:
+    def __init__(self, range, dim=None):
+        if len(range) != 2:
+            raise ValueError()
+        if range[0] > range[1]:
+            raise ValueError()
+
+        self.range = tuple(range)
+        self.dim = max([1, int(np.ceil(np.log(range[1]-range[0])/np.log(2)))]) if dim is None else int(dim)
+
+    def decode(self, v: np.ndarray):
+        v = np.where(np.array(v) >= 0.)
+        if len(v) != 1:
+            raise ValueError()
+        v = np.sum(2 ** v[0]) + self.range[0]
+        m = self.range[1]
+        return v if v < m else m-1
+
+    def encode(self, v: int):
+        v = int(v) - self.range[0]
+        v = np.fromstring(np.binary_repr(v), dtype=np.uint8) - ord('0')
+        v1 = np.full((int(self.dim), ), -1, dtype=np.int)
+        l = np.min([len(v), len(v1)])
+        v1[:l] = v[::-1][:l]
+        v1[np.where(v1 == 0)] = -1
+        return v1

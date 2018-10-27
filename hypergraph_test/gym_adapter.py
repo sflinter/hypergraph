@@ -34,22 +34,37 @@ class ValueAdapter(abc.ABC):
 
 
 class DiscreteAdapter(ValueAdapter):
-    def __init__(self, space: gym.spaces.Discrete):
+    def __init__(self, space: gym.spaces.Discrete, encoder=None):
         print("gym space:" + str(space))
         self.space = space
+
+        if encoder == 'auto':
+            encoder = 'bin' if self.space.n > 2 else None
+
+        self.encoder = None
+        if encoder == 'bin':
+            self.encoder = hg_utils.IntBinVecEncoder((0, self.space.n))
+        elif encoder is None:
+            pass
+        else:
+            raise ValueError()
 
     def from_gym(self, value):
         return 2.*np.float(value)/self.space.n-1.
 
     def to_gym(self, value):
-        value = cgp.TensorOperators.to_scalar(value)
-        return int(np.round((self.space.n-1)*(value+1.)/2.))
+        if self.encoder is None:
+            value = cgp.TensorOperators.to_scalar(value)
+            return int(np.round((self.space.n - 1) * (value + 1.) / 2.))
+        return self.encoder.decode(value)
 
     def create_graph_input_range(self):
         return None
 
     def get_graph_output_size(self):
-        return None
+        if self.encoder is None:
+            return None
+        return self.encoder.dim
 
 
 class BoxAdapter(ValueAdapter):

@@ -328,7 +328,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
                     print("*** target score achieved ***")
                     break
 
-            if c % 100 == 0:
+            if c % 10 == 0:
                 # TODO move to a specific callback
                 print("**** **** ****")
                 mean_score = np.mean(list(Individual.get_scores(population)))
