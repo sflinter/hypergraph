@@ -627,6 +627,8 @@ class RegularGrid:
     Regular grid pattern factory
     """
 
+    STRUCTURE_VERSION = 1
+
     def __init__(self, input_range, shape, operators: Operators,
                  output_size=None, backward_length=1, feedback=False, name=None):
         """
@@ -753,8 +755,7 @@ class RegularGrid:
         with output.as_default():
             hgg.SignatureCheck(
                 # TODO get signature from operators and input_range
-                # TODO include a grid generator version
-                signature='{}/{}/{}/{}'.format(*map(str, [shape, backward_length, self.output_size, self.feedback])),
+                signature='v={},shape={},bl={},out_sz={},fb={}'.format(*map(str, [self.STRUCTURE_VERSION, shape, backward_length, self.output_size, self.feedback])),
                 name='sign')
             inputs = self.create_inputs()
 

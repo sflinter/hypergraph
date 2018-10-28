@@ -27,7 +27,7 @@ op = cgp.TensorOperators()
 if mode_delay:
     cgp.DelayOperators(parent=op)
 
-env = gym.make('CartPole-v1')
+env = gym.make('CartPole-v1')   # CartPole-v1, MountainCar-v0, Acrobot-v1
 gymman = gym_adapter.GymManager(env, max_steps=250, trials_per_individual=3, action_prob=1.)
 
 grid = cgp.RegularGrid(shape=(5, 5), **gymman.get_cgp_net_factory_config(),
@@ -46,7 +46,7 @@ if model_file is not None:
     with open(model_file, 'rb') as ins:
         model = tweaks.TweaksSerializer.load(ins, graph=grid)
 else:
-    strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=100*10**3,
+    strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10**3,
                                        target_score=250, mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6},
                                        lambda_=9)
     strategy()

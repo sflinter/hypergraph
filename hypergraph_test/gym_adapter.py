@@ -34,7 +34,7 @@ class ValueAdapter(abc.ABC):
 
 
 class DiscreteAdapter(ValueAdapter):
-    def __init__(self, space: gym.spaces.Discrete, encoder=None):
+    def __init__(self, space: gym.spaces.Discrete, encoder='auto'):
         print("gym space:" + str(space))
         self.space = space
 
@@ -56,6 +56,7 @@ class DiscreteAdapter(ValueAdapter):
         if self.encoder is None:
             value = cgp.TensorOperators.to_scalar(value)
             return int(np.round((self.space.n - 1) * (value + 1.) / 2.))
+        value = [cgp.TensorOperators.to_scalar(v) for v in value]
         return self.encoder.decode(value)
 
     def create_graph_input_range(self):
