@@ -2,6 +2,9 @@ import numpy as np
 from . import graph as hgg
 from . import tweaks
 import itertools
+from datetime import datetime
+import time
+import sys
 
 
 class GeneticBase:
@@ -129,11 +132,6 @@ class GeneticBase:
         return individual
 
 
-class History:  # TODO callback
-    def __init__(self):
-        self.generations = []
-
-
 class TournamentSelection:
     def __init__(self, k=4, p=0.95):
         """
@@ -195,6 +193,62 @@ class Individual:
         return Individual(gene=dict(self.gene), score=self.score, gen_id=self.gen_id)
 
 
+class Callback:
+    def __init__(self):
+        self.model = None
+
+    def set_model(self, model):
+        self.model = model
+
+    def on_evo_begin(self, logs=None):
+        pass
+
+    def on_gen_end(self, logs=None):
+        pass
+
+
+class History(Callback):
+    def __init__(self):
+        self.generations = []
+        super().__init__()
+
+    def on_evo_begin(self, logs=None):
+        self.generations = []
+
+    def on_gen_end(self, logs=None):
+        self.generations.append(logs)
+
+
+class ConsoleLog(Callback):
+    def __init__(self):
+        self._dynamic_display = ((hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or
+                                 'ipykernel' in sys.modules)
+        self._prev_output_len = 0
+        super().__init__()
+
+    def _write_msg(self, msg):
+        if self._dynamic_display:
+            sys.stdout.write('\b' * self._prev_output_len)
+            sys.stdout.write('\r')
+            self._prev_output_len = len(msg)
+            sys.stdout.write(msg)
+        else:
+            sys.stdout.write(msg + '\n')
+
+    def on_gen_end(self, logs=None):
+        if logs is None:
+            logs = {}
+        gen_id = logs.get('gen_idx', 'NA')
+        gen_time = logs.get('gen_time', 'NA')
+        best_score = logs.get('best_score', 'NA')
+        population_mean_score = logs.get('population_mean_score', 'NA')
+        prefix = '*' if logs.get('hit', False) else '-'
+
+        msg = f'{prefix} gen_idx: {gen_id:{3}}, gen_time: {gen_time:{6}.{3}}, best_score: {best_score:{6}.{6}}, ' \
+              f'pop_mean_score: {population_mean_score:{6}.{6}}'
+        self._write_msg(msg)
+
+
 class MutationOnlyEvoStrategy(GeneticBase):
     """
     mu+lambda evolutionary strategy
@@ -203,8 +257,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
     def __init__(self, graph: hgg.Graph, fitness, *,
                  opt_mode='max', mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
-                 selector=TournamentSelection()):
-        # TODO callback
+                 selector=TournamentSelection(), callbacks=ConsoleLog()):
         # TODO validate params
         if opt_mode not in ['min', 'max']:
             raise ValueError()
@@ -219,18 +272,23 @@ class MutationOnlyEvoStrategy(GeneticBase):
         self.generations = generations
         self.target_score = None if target_score is None else float(target_score)
         self.selector = selector
+
+        self.callbacks = []
+        if isinstance(callbacks, Callback):
+            self.callbacks.append(callbacks)
+        elif callbacks is not None:
+            self.callbacks.extend(callbacks)
+
         super().__init__(graph=graph)
 
         self.population = None
         self.last_gen_id = -1
         self._best = None
-        self.history = None
 
     def reset(self):
         self.population = None
         self.last_gen_id = -1
         self._best = None
-        self.history = History()
 
     @property
     def best(self):     # TODO return Individual
@@ -258,6 +316,9 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
     def __call__(self):
         self.reset()
+
+        for callback in self.callbacks:
+            callback.set_model(self)
 
         population = self.population
         target_score = self.target_score
@@ -289,6 +350,9 @@ class MutationOnlyEvoStrategy(GeneticBase):
                 return True
             return False
 
+        for callback in self.callbacks:
+            callback.on_evo_begin()
+
         # create initial population
         if population is None:
             # TODO if we restart then we need the id of the previous generation
@@ -301,6 +365,8 @@ class MutationOnlyEvoStrategy(GeneticBase):
 
         base_gen_id = self.last_gen_id + 1
         for c in range(base_gen_id, base_gen_id+self.generations):
+            start_time = time.monotonic()
+
             # create new offspring
             offspring = itertools.chain(*[self._create_parent_offspring(parent, gen_id=c) for parent in population])
             offspring = list(offspring)
@@ -321,15 +387,21 @@ class MutationOnlyEvoStrategy(GeneticBase):
             # TODO check order
             del offspring
 
+            target_achieved = False
             if hit:
-                # TODO move to a specific callback
-                self.history.generations.append({'idx': c, 'best_score': self._best.score})     # TODO include datetime
                 if (target_score is not None) and score_cmp(self._best.score, target_score):
-                    print("*** target score achieved ***")
-                    break
+                    target_achieved = True
 
-            if c % 10 == 0:
-                # TODO move to a specific callback
-                print("**** **** ****")
-                mean_score = np.mean(list(Individual.get_scores(population)))
-                print("generation: "+str(c) + ", best_score: " + str(self._best.score) + ", mean_score: " + str(mean_score))
+            if len(self.callbacks):
+                population_scores = list(Individual.get_scores(population))
+                rec = {'gen_idx': c,
+                       'gen_time': time.monotonic() - start_time,
+                       'datetime': datetime.utcnow(),
+                       'best_score': self._best.score,
+                       'population_scores': population_scores,
+                       'population_mean_score': np.mean(population_scores),
+                       'hit': hit}
+                for callback in self.callbacks:
+                    callback.on_gen_end(rec)
+            if target_achieved:
+                break

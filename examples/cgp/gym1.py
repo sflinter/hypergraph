@@ -1,6 +1,6 @@
 import hypergraph as hg
 from hypergraph import cgp, tweaks
-from hypergraph.genetic import MutationOnlyEvoStrategy
+from hypergraph.genetic import MutationOnlyEvoStrategy, History, ConsoleLog
 from hypergraph_test import gym_adapter
 import gym
 import tempfile
@@ -46,25 +46,27 @@ if model_file is not None:
     with open(model_file, 'rb') as ins:
         model = tweaks.TweaksSerializer.load(ins, graph=grid)
 else:
+    history = History()
     strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10**3,
                                        target_score=250, mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6},
-                                       lambda_=9)
+                                       lambda_=9, callbacks=[history, ConsoleLog()])
     strategy()
     print("best:" + str(strategy.best))
     save_model(strategy.best)
 
-    history = pd.DataFrame(strategy.history.generations)
+    history = pd.DataFrame(history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
     # history.set_index('idx')
     if graphics_enabled:
         import matplotlib.pyplot as plt
-        history.plot(x='idx', y='best_score')
+        history.plot(x='gen_idx', y='best_score')
+        # TODO history.plot(x='gen_idx', y='population_mean_score')
         plt.show()
-    print(history)
+    # print(history)
     model = strategy.best
 
 print('symbolic execution: ' + str(cgp.exec_symbolically(grid, tweaks=model)))
 
 if graphics_enabled:
     while True:
-        gymman.test(grid, model, speed=0.5)
+        gymman.test(grid, model, speed=1.)
         time.sleep(1)
