@@ -70,7 +70,10 @@ class DiscreteAdapter(ValueAdapter):
 
 class BoxAdapter(ValueAdapter):
     def __init__(self, space: gym.spaces.Box):
-        print("gym space:" + str(space) + ", low=" + str(space.low) + ", high=" + str(space.high))
+        if space.dtype not in (np.float32, np.float64):
+            raise NotImplementedError()
+        print("gym space:" + str(space) + ", low=" + str(space.low) + ", high=" + str(space.high) +
+              ", dtype=" + str(space.dtype))
         self.space = space
 
     def from_gym(self, value):

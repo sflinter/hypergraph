@@ -62,3 +62,21 @@ class IntBinVecEncoder:
         v1[:l] = v[::-1][:l]
         v1[np.where(v1 == 0)] = -1
         return v1
+
+
+class BinDrivenTransferFunction:
+    def __init__(self, dim, f=lambda x: x):
+        self.dim = int(dim) + 1
+        self.f = f
+
+    def decode(self, v: np.ndarray):
+        sign = v[-1] >= 0
+        sign = -1. if sign else 1.
+        v = np.where(np.array(v[:-1]) >= 0.)
+        if len(v) != 1:
+            raise ValueError()
+        v = sign * np.sum(2 ** v[0])
+        #if sign < 0:
+        #    v = -1.*(2**self.dim - v)
+        v = 0 if v == 0 else 1.0/v
+        return self.f(v)

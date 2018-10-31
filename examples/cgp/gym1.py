@@ -58,8 +58,7 @@ else:
     # history.set_index('idx')
     if graphics_enabled:
         import matplotlib.pyplot as plt
-        history.plot(x='gen_idx', y='best_score')
-        # TODO history.plot(x='gen_idx', y='population_mean_score')
+        history.plot(x='gen_idx', y=['best_score', 'population_mean_score'])
         plt.show()
     # print(history)
     model = strategy.best
