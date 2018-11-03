@@ -5,6 +5,8 @@ import itertools
 from datetime import datetime
 import time
 import sys
+import os
+from datetime import datetime
 
 
 class GeneticBase:
@@ -247,6 +249,24 @@ class ConsoleLog(Callback):
         msg = f'{prefix} gen_idx: {gen_id:{3}}, gen_time: {gen_time:{6}.{3}}, best_score: {best_score:{6}.{6}}, ' \
               f'pop_mean_score: {population_mean_score:{6}.{6}}'
         self._write_msg(msg)
+
+
+class ModelCheckpoint(Callback):
+    """
+    A callback that saves the best model after every hit.
+    """
+
+    def __init__(self, path='.'):
+        self.path = path
+        super().__init__()
+
+    def on_gen_end(self, logs=None):
+        if logs is None or (not logs.get('hit', False)):
+            return
+        time = str(datetime.now().isoformat())
+        file = os.path.join(self.path, f'model-{time}')
+        with open(file, 'wb') as outs:
+            tweaks.TweaksSerializer.save(self.model.best, outs)
 
 
 class MutationOnlyEvoStrategy(GeneticBase):

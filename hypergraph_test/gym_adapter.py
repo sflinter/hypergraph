@@ -47,7 +47,8 @@ class DiscreteAdapter(ValueAdapter):
         elif encoder is None:
             pass
         else:
-            raise ValueError()
+            # TODO create a class EncoderFactory so if it is instance of this create an encoder given the space...
+            self.encoder = encoder
 
     def from_gym(self, value):
         return 2.*np.float(value)/self.space.n-1.
@@ -69,12 +70,14 @@ class DiscreteAdapter(ValueAdapter):
 
 
 class BoxAdapter(ValueAdapter):
-    def __init__(self, space: gym.spaces.Box):
+    def __init__(self, space: gym.spaces.Box, encoder=None):
         if space.dtype not in (np.float32, np.float64):
             raise NotImplementedError()
         print("gym space:" + str(space) + ", low=" + str(space.low) + ", high=" + str(space.high) +
               ", dtype=" + str(space.dtype))
         self.space = space
+        self.encoder = encoder
+        # TODO see todo about EncoderFactory
 
     def from_gym(self, value):
         value = np.nan_to_num(value)
@@ -87,9 +90,14 @@ class BoxAdapter(ValueAdapter):
         #return value
 
     def to_gym(self, value):
-        space = self.space
         value = list(map(cgp.TensorOperators.to_scalar, value))
-        value = np.array(value, dtype=np.float)
+        if self.encoder is not None:
+            value = np.array(value, dtype=np.float)  # TODO convert to space.dtype
+            value = value.reshape((-1, self.encoder.dim))
+            value = [self.encoder.decode(v) for v in value]
+
+        space = self.space
+        value = np.array(value, dtype=np.float)     # TODO convert to space.dtype
         value = (value + 1.)*(space.high - space.low)/2. + space.low
         return value.reshape(space.shape)
 
@@ -97,7 +105,10 @@ class BoxAdapter(ValueAdapter):
         return cgp.Tensor2Inputs.range(self.space.shape)
 
     def get_graph_output_size(self):
-        return int(np.array(self.space.shape).prod())
+        cell_count = int(np.array(self.space.shape).prod())
+        if self.encoder is not None:
+            return self.encoder.dim * cell_count
+        return cell_count
 
 
 class GymManager:

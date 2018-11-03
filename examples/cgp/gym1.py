@@ -1,20 +1,10 @@
 import hypergraph as hg
 from hypergraph import cgp, tweaks
-from hypergraph.genetic import MutationOnlyEvoStrategy, History, ConsoleLog
+from hypergraph.genetic import MutationOnlyEvoStrategy, History, ConsoleLog, ModelCheckpoint
 from hypergraph_test import gym_adapter
 import gym
-import tempfile
-import os
-import uuid
 import pandas as pd
 import time
-
-
-def save_model(obj):
-    f = os.path.join(tempfile.gettempdir(), 'cgp-' + str(uuid.uuid4()))
-    with open(f, 'wb') as outs:
-        tweaks.TweaksSerializer.save(obj, outs)
-    print("Model saved, file: " + str(f))
 
 
 # **** Begin of config section ****
@@ -49,10 +39,9 @@ else:
     history = History()
     strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10**3,
                                        target_score=250, mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6},
-                                       lambda_=9, callbacks=[history, ConsoleLog()])
+                                       lambda_=9, callbacks=[history, ConsoleLog(), ModelCheckpoint('/tmp/')])
     strategy()
     print("best:" + str(strategy.best))
-    save_model(strategy.best)
 
     history = pd.DataFrame(history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
     # history.set_index('idx')
