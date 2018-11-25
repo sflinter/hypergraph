@@ -12,7 +12,7 @@ with graph1.as_default():
     b = hg.node(lambda x: x ** 2) << hg.input_key('nd2')  # node() can also be used to "adapt" lambda functions to nodes
     print("b.name="+b.name)
 
-    c = hg.switch(0, name='sw1') << [a, hg.node_ref(a), hg.node_ref(b)]   # note multiple ref form possible
+    c = hg.switch(default=0, name='sw1') << [a, hg.node_ref(a), hg.node_ref(b)]   # note multiple ref form possible
 
     # TODO map node to a list or dict from input... eg foreach? act on the graph?
     # foreach iterates through items of a dictionary or list and executes another node...
@@ -33,7 +33,7 @@ with graph1.as_default():
     hg.mark('list3') << {'v': list(range(5))} << hg.deps([dp1, hg.node_ref(dp1)])
 
     hg.mark('dict1') << {'a1': {'b1': hg.node_ref('list1'), 'b2': hg.input_key('nd3'), 'b3': hg.node_ref('list2')},
-                      'a2': hg.input_all()}
+                         'a2': hg.input_all()}
 
     ret1 = hg.mark('ret1') << {'h1': [g2a, g2b], 'h2': a}
     hg.output() << ret1['h1'][0]  # the expression node[key] is equivalent to expression link(get_key(key), node)
