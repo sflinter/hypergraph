@@ -2,6 +2,15 @@ import sys
 import numpy as np
 
 
+class HGError(Exception):
+    """
+    The generic hypergraph error
+    """
+    def __init__(self, message, errors=None):
+        super().__init__(message)
+        self.errors = errors
+
+
 def export(f):
     """
     Decorator used to export functions and classes to the package level

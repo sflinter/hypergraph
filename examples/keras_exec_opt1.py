@@ -72,8 +72,12 @@ with graph1.as_default():
 
 def fitness(individual):
     ctx = hg.ExecutionContext(tweaks=individual)
-    with ctx.as_default():
-        return graph1()
+    try:
+        with ctx.as_default():
+            return graph1()
+    except:
+        # in case of exception we penalize the maximum
+        return np.inf
 
 
 history = History()

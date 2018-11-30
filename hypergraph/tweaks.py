@@ -42,7 +42,8 @@ class UniformChoice(Distribution):
     # TODO random subset and different probs for each value
 
     def __init__(self, values=(), group=None):
-        self.gen = lambda: np.random.choice(list(values))
+        values = list(values)
+        self.gen = lambda: np.random.choice(values)
         super().__init__(space_descriptor={'type': 'categorical', 'size': len(values)})
         self.group = group
 
@@ -115,6 +116,8 @@ class QNormal(Distribution):
 @export
 class Uniform(Distribution):
     def __init__(self, low=.0, high=1.0, size=None):
+        self.range = (low, high)
+        self.size = size
         self.gen = lambda: np.random.uniform(low=low, high=high, size=size)
         super().__init__(space_descriptor={'type': 'continuous', 'boundaries': (low, high)})
 
@@ -125,6 +128,8 @@ class Uniform(Distribution):
 @export
 class Normal(Distribution):
     def __init__(self, mean=0, stddev=1.0, size=None):
+        self.mean = mean
+        self.stddev = stddev
         self.gen = lambda: np.random.normal(loc=mean, scale=stddev, size=size)
         super().__init__(space_descriptor={'type': 'continuous', 'boundaries': (-np.inf, np.inf)})
 

@@ -1,5 +1,5 @@
 import hypergraph as hg
-from hypergraph.tweaks import GeneticBase
+from hypergraph.genetic import GeneticBase
 
 graph1 = hg.Graph(name="g1")
 with graph1.as_default():

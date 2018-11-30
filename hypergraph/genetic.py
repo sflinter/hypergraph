@@ -202,7 +202,7 @@ class Callback:
     def set_model(self, model):
         self.model = model
 
-    def on_evo_begin(self, logs=None):
+    def on_strategy_begin(self, logs=None):
         pass
 
     def on_gen_end(self, logs=None):
@@ -214,7 +214,7 @@ class History(Callback):
         self.generations = []
         super().__init__()
 
-    def on_evo_begin(self, logs=None):
+    def on_strategy_begin(self, logs=None):
         self.generations = []
 
     def on_gen_end(self, logs=None):
@@ -371,7 +371,7 @@ class MutationOnlyEvoStrategy(GeneticBase):
             return False
 
         for callback in self.callbacks:
-            callback.on_evo_begin()
+            callback.on_strategy_begin()
 
         # create initial population
         if population is None:

@@ -1,5 +1,5 @@
 import hypergraph as hg
-from hypergraph.tweaks import GeneticBase
+from hypergraph.genetic import GeneticBase
 
 
 def test1(x, y):
