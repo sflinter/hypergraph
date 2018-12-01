@@ -1,6 +1,7 @@
 import keras
 import hypergraph as hg
-from hypergraph.genetic import MutationOnlyEvoStrategy, History, ConsoleLog, ModelCheckpoint
+from hypergraph.genetic import MutationOnlyEvoStrategy
+from hypergraph.optimizer import History, ConsoleLog
 import time
 import numpy as np
 import pandas as pd

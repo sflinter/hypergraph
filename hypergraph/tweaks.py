@@ -92,6 +92,11 @@ class QUniform(Distribution):
     def __init__(self, low=0, high=16, q=1.0, size=None, group=None):
         if not isinstance(low, int) or not isinstance(high, int):
             raise ValueError()
+
+        self.range = (low, high)
+        self.q = q
+        self.size = size
+
         if q == 1.0:
             self.gen = lambda: np.random.randint(low=low, high=high, size=size)
         else:
@@ -293,7 +298,6 @@ class TweaksSerializer:
 
         output = {}
         for key, value in obj.items():
-            pass
             if hasattr(value, '_hg_tweak_descriptor'):
                 value = getattr(value, '_hg_tweak_descriptor')
             output[key] = value

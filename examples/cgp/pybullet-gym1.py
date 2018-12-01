@@ -1,6 +1,7 @@
 import hypergraph as hg
 from hypergraph import cgp, tweaks
-from hypergraph.genetic import MutationOnlyEvoStrategy, History, ConsoleLog, ModelCheckpoint
+from hypergraph.genetic import MutationOnlyEvoStrategy
+from hypergraph.optimizer import History, ConsoleLog, ModelCheckpoint
 from hypergraph_test import gym_adapter
 import gym
 import tempfile
