@@ -104,12 +104,12 @@ class GeneticBase:
     def mutations(self, individual, prob, groups_prob=None):
         """
         Apply mutations to the provided individual. Every gene has the same probability of being mutated.
-        :param individual:
+        :param individual: The individual as instance of class Individual or a dictionary containing its tweaks
         :param prob: Gene mutation probability, this is the default probability, that is the one applied to
         groups that don't have a specific value
         :param groups_prob: A dictionary containing items of the form group_name:prob. This map specifies a custom
         probability for each declared group. The group name matches the Distribution.group property.
-        :return: The individual
+        :return: The mutated individual as a dict of tweaks
         """
 
         phe = self.phenotype
@@ -122,8 +122,14 @@ class GeneticBase:
             individual = individual.gene
         individual = dict(individual)
 
+        def is_distr_not_aggr(item):
+            if isinstance(item[1], tweaks.Aggregation):
+                return False
+            return isinstance(item[1], tweaks.Distribution)
+
         # select items with distributions
-        gene_keys = filter(lambda it: isinstance(it[1], tweaks.Distribution), phe.items())
+        # gene_keys = filter(lambda it: isinstance(it[1], tweaks.Distribution), phe.items())
+        gene_keys = filter(is_distr_not_aggr, phe.items())
         gene_keys = map(lambda it: it[0], gene_keys)
         gene_keys = np.array(list(gene_keys))
 
@@ -136,6 +142,20 @@ class GeneticBase:
         gene_keys = gene_keys[selection]
         for key in gene_keys:
             individual[key] = phe[key].sample()
+
+        # special handling for tweaks of type Aggregation
+        gene_keys = filter(lambda it: isinstance(it[1], tweaks.Aggregation), phe.items())
+        gene_keys = map(lambda it: it[0], gene_keys)
+        gene_keys = np.array(list(gene_keys))
+
+        if groups_prob is None:
+            probs = prob
+        else:
+            probs = list(map(get_custom_prob, gene_keys))
+
+        for key, p in zip(gene_keys, probs):
+            individual[key] = phe[key].mutation(current_value=individual[key], prob=p)
+
         return individual
 
 

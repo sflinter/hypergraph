@@ -27,6 +27,37 @@ class Distribution(ABC):
     # TODO operator 'in'
 
 
+class Aggregation(Distribution):
+    """
+    An aggregation of independent random variables of the same type
+    """
+
+    def __init__(self, base: Distribution, size):
+        if isinstance(base, Aggregation):
+            raise ValueError('The base distribution of an Aggregation cannot be an Aggregation itself')
+        self.base = base
+        self.size = size
+        super().__init__(space_descriptor={'type': base.space_descriptor['type'], 'size': size})
+
+    def sample(self):
+        count = np.product(self.size)
+        base = self.base
+        output = [base.sample() for _ in range(count)]
+        return np.reshape(output, self.size)
+
+    def mutation(self, current_value, prob):
+        """
+        A specific helper for genetic algorithms. A subset of the aggregated variables is selected with
+        probability prob and mutation is applied by resampling the generated values from the base distribution.
+        :param current_value:
+        :param prob:
+        :return:
+        """
+        selection = np.where(np.random.uniform(size=self.size) < prob)
+        current_value[selection] = self.base.sample_multiple(size=(len(selection[0]), ))
+        return current_value
+
+
 @export
 class Constant(Distribution):
     def __init__(self, value):
@@ -43,12 +74,16 @@ class UniformChoice(Distribution):
 
     def __init__(self, values=(), group=None):
         values = list(values)
+        self.values = values
         self.gen = lambda: np.random.choice(values)
         super().__init__(space_descriptor={'type': 'categorical', 'size': len(values)})
         self.group = group
 
     def sample(self):
         return self.gen()
+
+    def sample_multiple(self, size):
+        return np.random.choice(self.values, size=size)
 
 
 @export
@@ -128,6 +163,10 @@ class Uniform(Distribution):
 
     def sample(self):
         return self.gen()
+
+    def sample_multiple(self, size):
+        r = self.range
+        return np.random.uniform(low=r[0], high=r[1], size=size)
 
 
 @export
