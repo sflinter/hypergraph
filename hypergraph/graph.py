@@ -573,18 +573,18 @@ class Lambda(Node):
     The only input argument of the lambda is the input of the node, the output of the callable is returned as node's output.
     """
 
-    def _inspect_func(self):
-        sig = inspect.signature(self.func)
-        self.params = sig.parameters.keys()
+    # def _inspect_func(self):
+    #    sig = inspect.signature(self.func)
+    #    self.params = sig.parameters.keys()
 
     def __init__(self, name=None, func=None, map_arguments=False):
         if not callable(func):
             raise ValueError("Param func should be a callable")
         self.func = func
         self.map_arguments = map_arguments  # or hasattr(func, '_hg_func_node_tag')
-        self.params = None
+        # self.params = None
 
-        self._inspect_func()
+        # self._inspect_func()
         super().__init__(name)
 
     def __call__(self, input, hpopt_config={}):

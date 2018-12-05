@@ -149,7 +149,7 @@ class GeneticBase:
         gene_keys = np.array(list(gene_keys))
 
         if groups_prob is None:
-            probs = prob
+            probs = itertools.repeat(prob)
         else:
             probs = list(map(get_custom_prob, gene_keys))
 
