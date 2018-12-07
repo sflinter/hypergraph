@@ -40,7 +40,7 @@ else:
     history = History()
     strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10**3,
                                        target_score=250, mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6},
-                                       lambda_=9, callbacks=[history, ConsoleLog(), ModelCheckpoint('/tmp/')])
+                                       lambda_=9, callbacks=[history, ConsoleLog(), ModelCheckpoint('.')])
     strategy()
     print("best:" + str(strategy.best))
 

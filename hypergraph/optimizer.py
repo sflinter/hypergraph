@@ -95,7 +95,7 @@ class ModelCheckpoint(Callback):
     def on_gen_end(self, logs=None):
         if logs is None or (not logs.get('hit', False)):
             return
-        time = str(datetime.now().isoformat())
+        time = str(datetime.now().isoformat()).replace(':', '_').replace('.', '_')
         file = os.path.join(self.path, f'model-{time}')
         with open(file, 'wb') as outs:
             tweaks.TweaksSerializer.save(self.model.best, outs)
