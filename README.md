@@ -138,7 +138,6 @@ Additionally, a gym adapter is provided so that OpenAI's gym environments can be
 A full example of a Hypergraph implementation of CGP for the CartPole(v1) gym environment is 
 provided [here](examples/cgp-gym1.py). The following video is an example of the results from running this example.
                      
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=gwb_iDRgi28)
-
+[![CGP Cartpole](https://img.youtube.com/vi/gwb_iDRgi28/0.jpg)](https://www.youtube.com/watch?v=gwb_iDRgi28 "CGP Cartpole")
 It should be noted that both the CGP and optimisation routines are general and can be easily tailored for
 a given problem by specifying a suitable set of operations and an appropriate fitness function.
