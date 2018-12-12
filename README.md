@@ -123,7 +123,7 @@ Hypergraph offers meta-heuristic optimisation routines to optimise graphs and
 networks.
 
 An example of a mutation-only genetic algorithm optimisation routine being applied to a graph
-is presented in this simple example for [linear regression](examples/linear_regr1.py)
+is presented in this simple example for [linear regression](examples/linear_regr1.py).
 
 ## Hypergraph in Action
 #### Cartesian Genetic Programming (CGP)
