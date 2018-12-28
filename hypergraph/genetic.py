@@ -14,7 +14,7 @@ class GeneticBase:
     composed by a dictionary of key:distribution pairs.
     """
 
-    def __init__(self, graph: hgg.Graph):
+    def __init__(self, graph: [hgg.Graph, dict]):
         """
         Init the object.
         :param graph: The graph used to initialize the phenotype.
@@ -24,8 +24,12 @@ class GeneticBase:
         if graph is not None:
             self.init_phenotype(graph)
 
-    def init_phenotype(self, graph: hgg.Graph):
-        phenotype = graph.get_hpopt_config_ranges()
+    def init_phenotype(self, graph_or_config_ranges: [hgg.Graph, dict]):
+        if isinstance(graph_or_config_ranges, hgg.Graph):
+            phenotype = graph_or_config_ranges.get_hpopt_config_ranges()
+        else:
+            phenotype = dict(graph_or_config_ranges)
+
         if len(phenotype.keys()) <= 2:
             # raise ValueError("Insufficient number of genes")
             phenotype['_internal_placeholder_77177ce9d789'] = tweaks.Uniform()
@@ -202,7 +206,7 @@ class MutationOnlyEvoStrategy:
     mu+lambda evolutionary strategy
     """
 
-    def __init__(self, graph: hgg.Graph, fitness, *,
+    def __init__(self, graph_or_config_ranges: hgg.Graph, fitness, *,
                  opt_mode='max', mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
                  selector=TournamentSelection(), callbacks=opt.ConsoleLog()):
@@ -227,7 +231,7 @@ class MutationOnlyEvoStrategy:
         elif callbacks is not None:
             self.callbacks.extend(callbacks)
 
-        self.gene = GeneticBase(graph=graph)
+        self.gene = GeneticBase(graph_or_config_ranges)
 
         self.population = None
         self.last_gen_id = -1
