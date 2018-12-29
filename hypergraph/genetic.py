@@ -32,7 +32,8 @@ class GeneticBase:
 
         if len(phenotype.keys()) <= 2:
             # raise ValueError("Insufficient number of genes")
-            phenotype['_internal_placeholder_77177ce9d789'] = tweaks.Uniform()
+            # phenotype['_internal_placeholder_77177ce9d789'] = tweaks.Uniform()
+            pass
         self.phenotype = phenotype
 
     @staticmethod

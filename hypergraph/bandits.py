@@ -23,6 +23,8 @@ class HyperBand:
         Execute the algorithm
         :return: The best config
         """
+        # TODO statistics
+
         f_eta = float(self.eta)
         s_max = int(np.floor(np.log(self.max_resources_per_conf)/np.log(f_eta)))
         budget = (s_max+1.)*self.max_resources_per_conf
@@ -30,25 +32,28 @@ class HyperBand:
         best = (np.inf, None)   # the best observed config
 
         for s in range(s_max, -1, -1):
-            n = np.ceil((budget/self.max_resources_per_conf)*np.power(f_eta, s)/(s+1))
+            n = int(np.ceil((budget/self.max_resources_per_conf)*np.power(f_eta, s)/(s+1)))
             r = self.max_resources_per_conf*np.power(f_eta, -s)
             # begin SuccessiveHalving with (n, r) inner loop
             configs = gene.create_population(size=n)
             # config is composed by tuples of the form (config, status)
             configs = [(config, None) for config in configs]
             for i in range(s+1):
+                assert len(configs) > 0
                 n_i = int(np.floor(n*np.power(f_eta, -i)))
-                r_i = r*np.power(f_eta, i)
+                r_i = r*np.power(f_eta, i)  # TODO is this supposed to be integer?
                 results = [self.loss(config=config, status=status, resources=r_i) for config, status in configs]
-                k = np.floor(n_i/f_eta)
+                k = int(np.floor(n_i/f_eta))
+                if k == 0:
+                    break
                 # take top k performing configurations indexes (based on loss)
                 selection = np.argsort(list(map(lambda x: x[0], results)))[:k]
 
                 # update the best observed config
                 local_best_loss = results[selection[0]][0]
                 if local_best_loss < best[0]:
-                    best = (local_best_loss, configs[selection[0]])
+                    best = (local_best_loss, configs[selection[0]][0])
 
-                configs = [(configs[t], results[t][1]) for t in selection]
+                configs = [(configs[t][0], results[t][1]) for t in selection]
 
         return best[1]
