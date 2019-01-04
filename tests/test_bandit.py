@@ -33,7 +33,7 @@ class BogusModel:
 def test_hyperband():
     model = BogusModel()
 
-    def loss(config, status, resources):
+    def loss(config, resources):
         return model.eval(config=config, steps=resources), None
 
     obj = HyperBand(config_ranges=model.get_config_ranges(), loss=loss, max_resources_per_conf=100)
