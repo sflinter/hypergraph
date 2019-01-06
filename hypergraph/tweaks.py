@@ -27,6 +27,39 @@ class Distribution(ABC):
     # TODO operator 'in'
 
 
+class FuncTweaksDecl:
+    def __init__(self, function, prefix):
+        self.function = function
+        self.prefix = prefix
+        self.tweaks_config = {}
+
+    def __call__(self, *args, **kwargs):
+        ctx = g.ExecutionContext.get_default()
+        params = dict([(k, ctx.tweaks[k]) for k in self.tweaks_config.keys()])
+        params.update(kwargs)
+        return self.function(**params)
+
+
+g.Graph.adapters[FuncTweaksDecl] = None
+
+
+@export
+def decl_tweaks(**key_tweak_pairs):
+    """
+    A decorator to be used to associate tweaks to a function declaration
+    :param key_tweak_pairs:
+    :return:
+    """
+    def real_decorator(function):
+        if isinstance(function, FuncTweaksDecl):
+            wrapper = function
+        else:
+            wrapper = FuncTweaksDecl(function=function, prefix=function.__name__)
+        wrapper.tweaks_config.update(key_tweak_pairs)
+        return wrapper
+    return real_decorator
+
+
 class Aggregation(Distribution):
     """
     An aggregation of independent random variables of the same type
