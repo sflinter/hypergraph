@@ -16,7 +16,7 @@ import pandas as pd
 FQ_NAME_SEP = '.'
 
 
-def fq_ident(idents, sep=FQ_NAME_SEP) -> str:
+def fq_ident(idents, *, sep=FQ_NAME_SEP) -> str:
     """
     Create a fully qualified identifier
     :param idents: list of identifiers or a string
@@ -573,38 +573,72 @@ class Lambda(Node):
     The only input argument of the lambda is the input of the node, the output of the callable is returned as node's output.
     """
 
-    # def _inspect_func(self):
-    #    sig = inspect.signature(self.func)
-    #    self.params = sig.parameters.keys()
-
     def __init__(self, name=None, func=None, map_arguments=False):
         if not callable(func):
             raise ValueError("Param func should be a callable")
         self.func = func
-        self.map_arguments = map_arguments  # or hasattr(func, '_hg_func_node_tag')
-        # self.params = None
+        self.map_arguments = map_arguments
+        self.tweaks_config_gen = None
 
-        # self._inspect_func()
         super().__init__(name)
+
+    def get_hpopt_config_ranges(self):
+        if self.tweaks_config_gen is not None:
+            return self.tweaks_config_gen(self)
+        return {}
 
     def __call__(self, input, hpopt_config={}):
         if self.map_arguments is False:
-            return self.func(input)
+            if isinstance(self.func, FuncTweaksDecl):
+                return self.func(input, __my_node=self)
+            else:
+                return self.func(input)
 
         if isinstance(input, dict):
-            # TODO use self.params, if some flag is set...
-            return self.func(**input)
+            if isinstance(self.func, FuncTweaksDecl):
+                return self.func(**input, __my_node=self)
+            else:
+                return self.func(**input)
 
-        return self.func(*input)
+        if isinstance(self.func, FuncTweaksDecl):
+            return self.func(*input, __my_node=self)
+        else:
+            return self.func(*input)
+
+
+class FuncTweaksDecl:
+    def __init__(self, function, prefix):
+        self.function = function
+        self.prefix = prefix
+        # note that in this dict the key is the param name only without the prefix: graph_name.func_name
+        self.tweaks_config = {}
+
+    def generate_tweaks_config(self, node: Node):
+        p = node.fully_qualified_name + FQ_NAME_SEP + self.prefix
+        return dict([(p + FQ_NAME_SEP + k, v) for k, v in self.tweaks_config.items()])
+
+    def __call__(self, *args, **kwargs):
+        node = kwargs['__my_node']
+        del kwargs['__my_node']
+        ctx = ExecutionContext.get_default()
+        p = node.fully_qualified_name + FQ_NAME_SEP + self.prefix
+        params = dict([(k, ctx.tweaks[p + FQ_NAME_SEP + k]) for k in self.tweaks_config.keys()])
+        params.update(kwargs)
+        return self.function(**params)
 
 
 @export
 def call(func, name=None):
-    return Lambda(func=func, name=name, map_arguments=True)
+    node = Lambda(func=func, name=name, map_arguments=True)
+    if isinstance(func, FuncTweaksDecl):
+        node.tweaks_config_gen = func.generate_tweaks_config
+    return node
 
 
 @export
 def call1(func, name=None):
+    if isinstance(func, FuncTweaksDecl):
+        raise ValueError()
     return Lambda(func=func, name=name, map_arguments=False)
 
 

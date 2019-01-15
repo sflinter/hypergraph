@@ -27,20 +27,7 @@ class Distribution(ABC):
     # TODO operator 'in'
 
 
-class FuncTweaksDecl:
-    def __init__(self, function, prefix):
-        self.function = function
-        self.prefix = prefix
-        self.tweaks_config = {}
-
-    def __call__(self, *args, **kwargs):
-        ctx = g.ExecutionContext.get_default()
-        params = dict([(k, ctx.tweaks[k]) for k in self.tweaks_config.keys()])
-        params.update(kwargs)
-        return self.function(**params)
-
-
-g.Graph.adapters[FuncTweaksDecl] = None
+# TODO g.Graph.adapters[FuncTweaksDecl] = None
 
 
 @export
@@ -51,10 +38,10 @@ def decl_tweaks(**key_tweak_pairs):
     :return:
     """
     def real_decorator(function):
-        if isinstance(function, FuncTweaksDecl):
+        if isinstance(function, g.FuncTweaksDecl):
             wrapper = function
         else:
-            wrapper = FuncTweaksDecl(function=function, prefix=function.__name__)
+            wrapper = g.FuncTweaksDecl(function=function, prefix=function.__name__)
         wrapper.tweaks_config.update(key_tweak_pairs)
         return wrapper
     return real_decorator
