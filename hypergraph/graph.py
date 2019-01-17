@@ -642,6 +642,17 @@ def call1(func, name=None):
     return Lambda(func=func, name=name, map_arguments=False)
 
 
+@export
+def run(callable, *, namespace='g', tweaks_handler, **kwargs):
+    graph1 = Graph(name=namespace)
+    with graph1.as_default():
+        output() << (call(callable) << kwargs)
+    tweaks = tweaks_handler(graph1.get_hpopt_config_ranges())
+    ctx = ExecutionContext(tweaks=tweaks)
+    with ctx.as_default():
+        return graph1(input=kwargs)
+
+
 def multi_iterable_map(fn, iterable):
     if isinstance(iterable, (list, tuple)):
         return [fn(obj) for obj in iterable]
