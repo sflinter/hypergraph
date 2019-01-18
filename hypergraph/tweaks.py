@@ -334,7 +334,7 @@ class Permutation(g.Node):
 @export
 def switch(*, default=None, name=None, distribution_group=None) -> g.Node:
     return Switch(name=name, default=default, distribution_group=distribution_group)
-
+# TODO switch_call
 
 @export
 def permutation(*, size=None, name=None) -> g.Node:

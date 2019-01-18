@@ -606,6 +606,36 @@ class Lambda(Node):
             return self.func(*input)
 
 
+class Invoke(Node):
+    """
+    A node that invoked a function that is passed as input alongside with the arguments to be passed to the same.
+    The input should be a list or a tuple of two elements, the first being the function to be invoked and the second
+    a dictionary containing the arguments for the function.
+    """
+
+    def __init__(self, name=None):
+        super().__init__(name)
+
+    def __call__(self, input, hpopt_config={}):
+        func = input[0]
+        args = input[1]
+        if not isinstance(args, dict):
+            raise ValueError('dict expected')
+
+        if isinstance(func, FuncTweaksDecl):
+            raise RuntimeError()
+            # for not not supported because we cannot handle the tweaks
+
+        if isinstance(args, dict):
+            return func(**args)
+        if isinstance(args, (list, tuple)):
+            return func(*args)
+        if args is None:
+            return func()
+        else:
+            raise ValueError()
+
+
 class FuncTweaksDecl:
     def __init__(self, function, prefix):
         self.function = function
@@ -628,6 +658,11 @@ class FuncTweaksDecl:
 
 
 @export
+def invoke(*, name=None):
+    return Invoke(name=name)
+
+
+@export
 def call(func, name=None):
     node = Lambda(func=func, name=name, map_arguments=True)
     if isinstance(func, FuncTweaksDecl):
@@ -643,11 +678,18 @@ def call1(func, name=None):
 
 
 @export
-def run(callable, *, namespace='g', tweaks_handler, **kwargs):
-    graph1 = Graph(name=namespace)
-    with graph1.as_default():
-        output() << (call(callable) << kwargs)
-    tweaks = tweaks_handler(graph1.get_hpopt_config_ranges())
+def run(callable, *, namespace='g', tweaks_handler=None, **kwargs):
+    if isinstance(callable, Graph):
+        graph1 = callable
+    else:
+        graph1 = Graph(name=namespace)
+        with graph1.as_default():
+            output() << (call(callable) << kwargs)
+
+    tweaks = {}
+    if tweaks_handler is not None:
+        tweaks = tweaks_handler(graph1.get_hpopt_config_ranges())
+
     ctx = ExecutionContext(tweaks=tweaks)
     with ctx.as_default():
         return graph1(input=kwargs)
