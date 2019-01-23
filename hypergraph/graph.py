@@ -202,6 +202,19 @@ class Node(ABC):
         # TODO param to express the context related to the requested tweaks
         return {}
 
+    def get_tweaks_config(self, context_match=None) -> dict:
+        """
+        Return a dictionary with the tweaks config. The keys must be fully qualified identifiers of the internal
+        options. This method is meant to substitute get_hpopt_config_ranges.
+        :param context_match: If context_match is a string then it's used to match the tweak's group
+        (see tweaks.Distribution.group). If match_context is a callable, then it is invoked with a tweak config
+        as argument and a boolean is expected as return value to confirm or not the match.
+        :return: A dictionary
+        """
+        if context_match is not None:
+            raise NotImplementedError()
+        return self.get_hpopt_config_ranges()
+
     @abstractmethod
     def __call__(self, input, hpopt_config={}):
         """
@@ -1233,6 +1246,11 @@ class Graph:
         for key, node in self.nodes.items():
             output.update(node.get_hpopt_config_ranges())
         return output
+
+    def get_tweaks_config(self, context_match_f=None):
+        if context_match_f is not None:
+            raise NotImplementedError()
+        return self.get_hpopt_config_ranges()
 
     @staticmethod
     def get_node_ext(node, graph=None):
