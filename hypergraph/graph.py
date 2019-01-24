@@ -603,18 +603,18 @@ class Lambda(Node):
     def __call__(self, input, hpopt_config={}):
         if self.map_arguments is False:
             if isinstance(self.func, FuncTweaksDecl):
-                return self.func(input, __my_node=self)
+                return self.func.run(input, __my_node=self)
             else:
                 return self.func(input)
 
         if isinstance(input, dict):
             if isinstance(self.func, FuncTweaksDecl):
-                return self.func(**input, __my_node=self)
+                return self.func.run(**input, __my_node=self)
             else:
                 return self.func(**input)
 
         if isinstance(self.func, FuncTweaksDecl):
-            return self.func(*input, __my_node=self)
+            return self.func.run(*input, __my_node=self)
         else:
             return self.func(*input)
 
@@ -637,7 +637,7 @@ class Invoke(Node):
 
         if isinstance(func, FuncTweaksDecl):
             raise RuntimeError()
-            # for not not supported because we cannot handle the tweaks
+            # for now not supported because we cannot handle the tweaks
 
         if isinstance(args, dict):
             return func(**args)
@@ -660,7 +660,19 @@ class FuncTweaksDecl:
         p = node.fully_qualified_name + FQ_NAME_SEP + self.prefix
         return dict([(p + FQ_NAME_SEP + k, v) for k, v in self.tweaks_config.items()])
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, **kwargs):
+        """
+        The invocation of an object of this class a function won't result in the actual invocation of the function
+        but rather in the creation of a graph node.
+        :param kwargs:
+        :return:
+        """
+        return call(self) << kwargs
+
+    def run(self, *args, **kwargs):
+        if len(args) != 0:
+            raise ValueError('Position-base arguments not supported')
+
         node = kwargs['__my_node']
         del kwargs['__my_node']
         ctx = ExecutionContext.get_default()
@@ -669,6 +681,39 @@ class FuncTweaksDecl:
         params.update(kwargs)
         return self.function(**params)
 
+
+@export
+def function():
+    """
+    A decorator to be used to 'mark' a function as graph's node. See also decl_tweaks.
+    :return:
+    """
+    def real_decorator(func):
+        if isinstance(func, FuncTweaksDecl):
+            wrapper = func
+        else:
+            wrapper = FuncTweaksDecl(function=func, prefix=func.__name__)
+        return wrapper
+    return real_decorator
+
+
+@export
+def aggregator():
+    """
+    A decorator to be used to 'mark' a function as graph factory.
+    :return:
+    """
+    def real_decorator(func):
+        name = func.__name__
+
+        def wrapper(*args, **kwargs):
+            graph1 = Graph(name=name)
+            with graph1.as_default():
+                output() << func(*args, **kwargs)
+            return graph1
+
+        return wrapper
+    return real_decorator
 
 @export
 def invoke(*, name=None):
@@ -691,7 +736,7 @@ def call1(func, name=None):
 
 
 @export
-def run(callable, *, namespace='g', tweaks_handler=None, **kwargs):
+def run(callable, *, namespace='g', tweaks_handler=None, tweaks=None, **kwargs):
     if isinstance(callable, Graph):
         graph1 = callable
     else:
@@ -699,9 +744,12 @@ def run(callable, *, namespace='g', tweaks_handler=None, **kwargs):
         with graph1.as_default():
             output() << (call(callable) << kwargs)
 
-    tweaks = {}
     if tweaks_handler is not None:
+        if tweaks is not None:
+            raise ValueError('Either tweaks or tweaks_handler can be not None')
         tweaks = tweaks_handler(graph1.get_hpopt_config_ranges())
+    if tweaks is None:
+        tweaks = {}
 
     ctx = ExecutionContext(tweaks=tweaks)
     with ctx.as_default():

@@ -2,16 +2,21 @@ import hypergraph as hg
 from hypergraph.genetic import GeneticBase
 
 
+@hg.function()
+# TODO @hg.decl_tweaks(z=hg.tweak(hg.LogUniform(), name='z'))
 def test1(x, y):
     return x+y
 
 
-graph1 = hg.Graph(name="g1")
-with graph1.as_default():
-    n1 = hg.mark() << {'x': 2, 'y': hg.tweak(hg.LogUniform(), name="y1")}
-    n2 = hg.mark() << {'x': 1, 'y': hg.tweak(hg.LogUniform(), name="y2")}
+@hg.aggregator()
+def mygraph1():
+    n1 = {'x': 2, 'y': hg.tweak(hg.LogUniform(), name="y1")}
+    n2 = {'x': 1, 'y': hg.tweak(hg.LogUniform(), name="y2")}
     a = hg.call(test1) << (hg.switch(name="sw1") << [n1, n2])
-    hg.output() << [a, hg.tweak(hg.QUniform(high=100)), hg.tweak(hg.LogUniform())]
+    return [a, hg.tweak(hg.QUniform(high=100)), hg.tweak(hg.LogUniform())]
+
+
+graph1 = mygraph1()
 
 # create a population from graph's phenotype
 genetic = GeneticBase(graph1)
@@ -27,6 +32,4 @@ genetic.mutations(child, prob=0.5)
 print(child)
 
 # use an individual as graph's tweak
-ctx = hg.ExecutionContext(tweaks=child)
-with ctx.as_default():
-    print(graph1())
+print(hg.run(graph1, tweaks=child))

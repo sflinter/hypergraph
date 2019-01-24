@@ -1,7 +1,9 @@
 import keras
+from keras import backend as KBackend
 import hypergraph as hg
 from hypergraph import tweaks
-from keras.layers import Dense, GlobalAveragePooling2D, GlobalMaxPooling2D, Dropout, Input
+from keras.layers import Dense, GlobalAveragePooling2D, GlobalMaxPooling2D, Dropout, Input, Conv2D,\
+    BatchNormalization, Activation
 from keras.optimizers import Adam, RMSprop
 
 
@@ -44,21 +46,28 @@ def compile_model(input_layer, output_layer, optimizer, lr):
     return output
 
 
+@hg.function()
 def create_features_extraction_net(input_layer):
-    # TODO
-    pass
+    net = Conv2D(filters=64, kernel_size=(7, 7), strides=(2, 2), padding='same')(input_layer)
+    net = BatchNormalization(axis=3)(net)
+    return Activation("relu")(net)
 
 
-# Finally we put all together by connection the various components declared above as nodes of a graph.
-graph1 = hg.Graph(name="sample_model")
-with graph1.as_default():
-    input_layer = hg.call(lambda: Input(None, None))
-    top_section = hg.call(create_features_extraction_net) << {'input_layer': input_layer}
-    bottom_section = hg.call(create_classifier_terminal_part)
-    model = hg.call(compile_model) << {
-        'input_layer': input_layer,
-        'output_layer': bottom_section
-    }
-    hg.output() << model
+@hg.function()
+def keras_clear_session():
+    KBackend.clear_session()
 
+
+# Finally we put all together by connecting the various components declared above as nodes of a graph.
+@hg.aggregator()
+def model_graph():
+    hg.add_event_handler('enter', deps=hg.call(keras_clear_session))
+    input_layer = hg.call(lambda: Input(None, None, 3))
+    top_section = create_features_extraction_net(input_layer=input_layer)
+    bottom_section = create_classifier_terminal_part(input_layer=top_section)
+    model = compile_model(input_layer=input_layer, output_layer=bottom_section)
+    return model
+
+
+graph = model_graph()
 # TODO more to come...

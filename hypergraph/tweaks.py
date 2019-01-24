@@ -33,7 +33,7 @@ class Distribution(ABC):
 @export
 def decl_tweaks(**key_tweak_pairs):
     """
-    A decorator to be used to associate tweaks to a function declaration
+    A decorator to be used to associate tweaks to a function declaration. Also the function is 'marked' as graph's node
     :param key_tweak_pairs:
     :return:
     """

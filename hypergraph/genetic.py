@@ -207,11 +207,12 @@ class MutationOnlyEvoStrategy:
     mu+lambda evolutionary strategy
     """
 
+    # TODO pass a 'scheduler' (eg. hyperband) and use it to assign the resources to each evaluation of the fitness
     def __init__(self, graph_or_config_ranges: hgg.Graph, fitness, *,
                  opt_mode='max', mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
                  selector=TournamentSelection(), callbacks=opt.ConsoleLog()):
-        # TODO validate params
+        # TODO remove opt_mode, minimize in all cases, to maximize just minimize -fitness(...)
         if opt_mode not in ['min', 'max']:
             raise ValueError()
 
