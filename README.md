@@ -4,19 +4,19 @@
 
 # Hypergraph #
 
-__Hypergraph__ is an open source software library for implementing graphs and networks.
- 
-Hypergraph was original developed to provide a high level of abstraction when developing machine learning 
-and deep neural networks. However, the system is general enough to be applicable in a wide variety of other domains.
+__Hypergraph__ is an open source library originally developed to provide a high level of abstraction when developing machine learning and deep neural networks.
 
-Hypergraph also provides meta-heurisitic optimisation algorithms (e.g. genetic algorithms) 
-to optimise the structure of the graph for a specific task. 
-This means that the same graph can be used, and automatically optimised, for a number of different tasks
-or for the same task but across different data sets.
+The key concept of this library is the graph, a structure composed by interconnected nodes.
+The connections between nodes play the crucial part, these can be optimized through meta-heurisitic optimisation algorithms (e.g. genetic algorithms).
+The result is a network of nodes composed by "moving parts" which can be somehow altered by global optimization algorithms.
+The "moving parts" of the structure are called tweaks. The optimization algorithms require a measure of
+fitness, which is user-defined, to understand the effect of each tweak on the task to be optimized.
+
+The purpose of the project is purely experimental and we are willing to get any contribution and comment. 
 
 ## Getting Started  with Hypergraph
 To install Hypergraph the following command can be used. Hypergraph is 
-compatible with Windows and Linux operating systems. 
+compatible with Windows and Linux operating systems. It supports Python 3.6 or superior.
 
 ```bash
 pip install git+https://github.com/aljabr0/hypergraph
@@ -26,27 +26,41 @@ The core data structure of Hypergraph is a __graph__. Each graph consists of a n
 __nodes__. Methods of creating nodes and adding them to a graph is demonstrated in the next sections. 
 
 ##### Creating Nodes
-Hypergraph allows for nodes to be created by using the base class hg.Node. Notably, the __call\__ method is executed at
-the runtime of the graph. Custom nodes are very useful when implementing
-hyperparameter optimisation. An example of a simple custom node is shown in the following snippet.
-
+Nodes are extensions of the class *hg.Node*. However, there a number of shortcuts and tricks to define nodes using
+standard python functions. Let's for instance declare a Keras model where some parameters and connections
+between the layers are dynamic.
+Here is a code snippet with the declaration of the first node:
 ```python
 import hypergraph as hg
 import numpy as np
 
-class MyFirstNode(hg.Node):  # creating a node
-    def __init__(self, name=None):
-        super().__init__(name)   
-    
-    def __call__(self, input, hpopt_config={}):
-        x = input.get('x')
-        return np.multiply(x, 3)
+@hg.function()
+# Declare the first tweak as a uniform choice between two types of global pooling
+@hg.decl_tweaks(global_pool_op=tweaks.UniformChoice((GlobalAveragePooling2D, GlobalMaxPooling2D)))
+# the second tweak is the dropout rate which will be a uniform value between 0 and 0.5
+@hg.decl_tweaks(dropout_rate=tweaks.Uniform(0, 0.5))
+def create_classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_rate):
+    """
+    Create the terminal part of the model. This section is composed by a global pooling layer followed by a dropout
+    and finally a dense layer. The type of global pooling is chosen automatically by the hyper-parameters optimization
+    algorithm, the same also applies to the dropout rate.
+    :param input_layer: The input layer which is the output of the node connected right on the top of this
+    :param class_count:
+    :param global_pool_op: The type of global pooling, this parameter is handled directly by hypergraph
+    :param dropout_rate: The dropout rate, this parameter is handled directly by hypergraph
+    :return: The output layer of this section of network
+    """
+    net = global_pool_op()(input_layer)
+    net = Dropout(rate=dropout_rate)(net)
+    return Dense(class_count, activation='softmax')(net)
 ```
-Alternatively, nodes can be created 'on-the-fly' by wrapping an existing
-function with the hg.call() command. This is useful when no hyperparameter
-optimisation is required.
+First of all, to declare a node we define a function with the decorator *@hg.function()*, this is just necessary
+to install a fine machinery around the function so that it can then... 
 
-#### Building Your First Graph
+
+
+
+#### Putting all together, the graph
 The following snippet provides an overview of building graphs with Hypergraph.
 The features highlighted include:
 - To create a graph, simply call hg.Graph().
