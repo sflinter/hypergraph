@@ -34,6 +34,10 @@ input_shape = (64, 64)
 
 
 class MyGenerator(keras.utils.Sequence):
+    """
+    A dummy data generator for out model.
+    """
+
     def __init__(self):
         self.batch_size = 16
 
@@ -72,10 +76,8 @@ with graph1.as_default():
 
 
 def fitness(individual):
-    ctx = hg.ExecutionContext(tweaks=individual)
     try:
-        with ctx.as_default():
-            return graph1()
+        return hg.run(graph1, tweaks=individual)
     except:
         # in case of exception we penalize the maximum
         return np.inf

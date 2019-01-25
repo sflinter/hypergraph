@@ -1,17 +1,19 @@
+# New example under construction...
+
 import keras
 from keras import backend as KBackend
 import hypergraph as hg
-from hypergraph import tweaks
 from keras.layers import Dense, GlobalAveragePooling2D, GlobalMaxPooling2D, Dropout, Input, Conv2D,\
     BatchNormalization, Activation
 from keras.optimizers import Adam, RMSprop
 
 
+@hg.function()
 # Declare the first tweak as a uniform choice between two types of global pooling
-@hg.decl_tweaks(global_pool_op=tweaks.UniformChoice((GlobalAveragePooling2D, GlobalMaxPooling2D)))
+@hg.decl_tweaks(global_pool_op=hg.tweaks.UniformChoice((GlobalAveragePooling2D, GlobalMaxPooling2D)))
 # the second tweak is the dropout rate which will be a uniform value between 0 and 0.5
-@hg.decl_tweaks(dropout_rate=tweaks.Uniform(0, 0.5))
-def create_classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_rate):
+@hg.decl_tweaks(dropout_rate=hg.tweaks.Uniform(0, 0.5))
+def classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_rate):
     """
     Create the terminal part of the model. This section is composed by a global pooling layer followed by a dropout
     and finally a dense layer. The type of global pooling is chosen automatically by the hyper-parameters optimization
@@ -27,10 +29,11 @@ def create_classifier_terminal_part(input_layer, class_count, global_pool_op, dr
     return Dense(class_count, activation='softmax')(net)
 
 
+@hg.function()
 # Declare the first tweak as a uniform choice between two types of optimizers
-@hg.decl_tweaks(optimizer=tweaks.UniformChoice((Adam, RMSprop)))
+@hg.decl_tweaks(optimizer=hg.tweaks.UniformChoice((Adam, RMSprop)))
 # the second tweak is the learning rate
-@hg.decl_tweaks(lr=tweaks.LogUniform(0.00001, 0.1))
+@hg.decl_tweaks(lr=hg.tweaks.LogUniform(0.00001, 0.1))
 def compile_model(input_layer, output_layer, optimizer, lr):
     """
     Compile the model having the first two parameter as input and output layers respectively. The optimizer and its
@@ -47,7 +50,12 @@ def compile_model(input_layer, output_layer, optimizer, lr):
 
 
 @hg.function()
-def create_features_extraction_net(input_layer):
+def features_extraction_net(input_layer):
+    """
+    A features extraction network, this is here and kept simple just for demonstrative purposes.
+    :param input_layer:
+    :return:
+    """
     net = Conv2D(filters=64, kernel_size=(7, 7), strides=(2, 2), padding='same')(input_layer)
     net = BatchNormalization(axis=3)(net)
     return Activation("relu")(net)
@@ -63,8 +71,8 @@ def keras_clear_session():
 def model_graph():
     hg.add_event_handler('enter', deps=hg.call(keras_clear_session))
     input_layer = hg.call(lambda: Input(None, None, 3))
-    top_section = create_features_extraction_net(input_layer=input_layer)
-    bottom_section = create_classifier_terminal_part(input_layer=top_section)
+    top_section = features_extraction_net(input_layer=input_layer)
+    bottom_section = classifier_terminal_part(input_layer=top_section)
     model = compile_model(input_layer=input_layer, output_layer=bottom_section)
     return model
 

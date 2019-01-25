@@ -1,10 +1,9 @@
 import hypergraph as hg
-from hypergraph import tweaks
 from hypergraph.genetic import GeneticBase
 
 
-@hg.decl_tweaks(y=tweaks.Uniform())
-@hg.decl_tweaks(z=tweaks.Normal(mean=10))
+@hg.decl_tweaks(y=hg.tweaks.Uniform())
+@hg.decl_tweaks(z=hg.tweaks.Normal(mean=10))
 def test1(x, y, z):
     return x+y+z
 

@@ -26,20 +26,20 @@ The core data structure of Hypergraph is a __graph__. Each graph consists of a n
 __nodes__. Methods of creating nodes and adding them to a graph is demonstrated in the next sections. 
 
 ##### Creating Nodes
-Nodes are extensions of the class *hg.Node*. However, there a number of shortcuts and tricks to define nodes using
+Nodes are instances of the class *hg.Node*. However, there a number of shortcuts and tricks to define nodes using
 standard python functions. Let's for instance declare a Keras model where some parameters and connections
 between the layers are dynamic.
-Here is a code snippet with the declaration of the first node:
+Here is a code snippet with the declaration of the first node (node is meant in the hypegraph context):
 ```python
 import hypergraph as hg
-import numpy as np
+from keras.layers import Dense, Dropout, GlobalAveragePooling2D, GlobalMaxPooling2D
 
 @hg.function()
 # Declare the first tweak as a uniform choice between two types of global pooling
-@hg.decl_tweaks(global_pool_op=tweaks.UniformChoice((GlobalAveragePooling2D, GlobalMaxPooling2D)))
+@hg.decl_tweaks(global_pool_op=hg.UniformChoice((GlobalAveragePooling2D, GlobalMaxPooling2D)))
 # the second tweak is the dropout rate which will be a uniform value between 0 and 0.5
-@hg.decl_tweaks(dropout_rate=tweaks.Uniform(0, 0.5))
-def create_classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_rate):
+@hg.decl_tweaks(dropout_rate=hg.Uniform(0, 0.5))
+def classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_rate):
     """
     Create the terminal part of the model. This section is composed by a global pooling layer followed by a dropout
     and finally a dense layer. The type of global pooling is chosen automatically by the hyper-parameters optimization
@@ -55,10 +55,12 @@ def create_classifier_terminal_part(input_layer, class_count, global_pool_op, dr
     return Dense(class_count, activation='softmax')(net)
 ```
 First of all, to declare a node we define a function with the decorator *@hg.function()*, this is just necessary
-to install a fine machinery around the function so that it can then... 
+to install hypergraph's fine machinery around the function. 
+TODO explain tweaks...
 
+![graph and tweaks example](./doc/keras-tweaks-example.png)
 
-
+__Figure 1__ The node created by *classifier_terminal_part* with its internal tweaks and their interaction with the various parts.
 
 #### Putting all together, the graph
 The following snippet provides an overview of building graphs with Hypergraph.
@@ -71,6 +73,8 @@ multiple inputs to easily be supplied to and specified within a graph.
 that the node _b_ is input to _a_. 
 - Finally, the output of the graph is specified by using the designated
 identity node hg.output(). 
+
+TODO explain the main difference between hg.function and hg.aggregator
 
 ```python
 my_first_graph = hg.Graph('my_first_graph')  # create your graph

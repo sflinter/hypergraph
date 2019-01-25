@@ -657,7 +657,9 @@ class FuncTweaksDecl:
         self.tweaks_config = {}
 
     def generate_tweaks_config(self, node: Node):
-        p = node.fully_qualified_name + FQ_NAME_SEP + self.prefix
+        # TODO we need a flag to decide how to build the tweak unique name
+        # p = node.fully_qualified_name + FQ_NAME_SEP + self.prefix
+        p = node.parent.name + FQ_NAME_SEP + self.prefix
         return dict([(p + FQ_NAME_SEP + k, v) for k, v in self.tweaks_config.items()])
 
     def __call__(self, **kwargs):
@@ -671,12 +673,13 @@ class FuncTweaksDecl:
 
     def run(self, *args, **kwargs):
         if len(args) != 0:
-            raise ValueError('Position-base arguments not supported')
+            raise ValueError('Position-based arguments not supported')
 
         node = kwargs['__my_node']
         del kwargs['__my_node']
         ctx = ExecutionContext.get_default()
-        p = node.fully_qualified_name + FQ_NAME_SEP + self.prefix
+        # p = node.fully_qualified_name + FQ_NAME_SEP + self.prefix
+        p = node.parent.name + FQ_NAME_SEP + self.prefix
         params = dict([(k, ctx.tweaks[p + FQ_NAME_SEP + k]) for k in self.tweaks_config.keys()])
         params.update(kwargs)
         return self.function(**params)
@@ -704,12 +707,13 @@ def aggregator():
     :return:
     """
     def real_decorator(func):
-        name = func.__name__
+        def wrapper(name=None, **kwargs):
+            if name is None:
+                name = func.__name__
 
-        def wrapper(*args, **kwargs):
             graph1 = Graph(name=name)
             with graph1.as_default():
-                output() << func(*args, **kwargs)
+                output() << func(**kwargs)
             return graph1
 
         return wrapper
@@ -1093,7 +1097,8 @@ class Dependency:
 @export
 def deps(deps) -> Dependency:
     """
-    Inject dependencies using the node's shift operator, example: node << deps([node_ref('abc'), cde])
+    Inject dependencies using the node's shift operator, example: node << deps([node_ref('abc'), cde]).
+    The framework checks that the dependencies are in "executed" status before launching the current node.
     :param deps:
     :return:
     """

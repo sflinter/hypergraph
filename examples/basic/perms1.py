@@ -18,7 +18,5 @@ genetic.mutations(child, prob=0.5)
 # apply mutations to an individual
 print(child)
 
-# use an individual as graph's tweak
-ctx = hg.ExecutionContext(tweaks=child)
-with ctx.as_default():
-    print(graph1())
+# use an individual as graph's tweaks
+print(hg.run(graph1, tweaks=child))
