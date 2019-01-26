@@ -621,7 +621,7 @@ class Lambda(Node):
 
 class Invoke(Node):
     """
-    A node that invoked a function that is passed as input alongside with the arguments to be passed to the same.
+    A node that invokes a function that is passed as input alongside with the arguments to be passed to the same.
     The input should be a list or a tuple of two elements, the first being the function to be invoked and the second
     a dictionary containing the arguments for the function.
     """
@@ -726,6 +726,9 @@ def invoke(*, name=None):
 
 @export
 def call(func, name=None):
+    if isinstance(func, Graph):
+        return Subgraph(name=name, graph=func)
+
     node = Lambda(func=func, name=name, map_arguments=True)
     if isinstance(func, FuncTweaksDecl):
         node.tweaks_config_gen = func.generate_tweaks_config
@@ -737,6 +740,37 @@ def call1(func, name=None):
     if isinstance(func, FuncTweaksDecl):
         raise ValueError()
     return Lambda(func=func, name=name, map_arguments=False)
+
+
+class Map(Node):
+    """
+    A node that applies a function to all the items in a list as input. If the input is a dictionary instead,
+    the function is applied to the values of the dict.
+    """
+
+    def __init__(self, func, *, name=None):
+        self.func = func
+        super().__init__(name)
+
+    def __call__(self, input, hpopt_config={}):
+        if isinstance(input, list):
+            return list(map(self.func, input))
+        if isinstance(input, tuple):
+            return tuple(map(self.func, input))
+
+        if isinstance(input, dict):
+            f = self.func
+            return dict([(k, f(v)) for k, v in input.items()])
+
+        raise ValueError('Map nodes accepts only lists, dictionaries and tuples as input')
+
+
+@export
+def nmap(func, name=None):
+    # TODO check whether a graph can be passed as func
+    if isinstance(func, FuncTweaksDecl):
+        raise ValueError('A high level hypergraph function is not supported by map')
+    return Map(func, name=name)
 
 
 @export

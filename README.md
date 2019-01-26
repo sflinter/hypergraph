@@ -15,6 +15,7 @@ fitness, which is user-defined, to understand the effect of each tweak on the ta
 The purpose of the project is purely experimental and we are willing to get any contribution and comment. 
 
 ## Getting Started  with Hypergraph
+##### Installation
 To install Hypergraph the following command can be used. Hypergraph is 
 compatible with Windows and Linux operating systems. It supports Python 3.6 or superior.
 
@@ -22,14 +23,19 @@ compatible with Windows and Linux operating systems. It supports Python 3.6 or s
 pip install git+https://github.com/aljabr0/hypergraph
 ```
 
-The core data structure of Hypergraph is a __graph__. Each graph consists of a number of 
-__nodes__. Methods of creating nodes and adding them to a graph is demonstrated in the next sections. 
+#### Hypergraph and Keras in action
+
+The core data structure of Hypergraph is a directed __graph__. Each graph consists of a number of 
+__nodes__, the information in form of python objects, flows from the inputs, gets transformed and continues toward the single output that each node has.
+Methods of creating nodes and adding them to a graph are demonstrated in the next sections. We start with a relatively
+simple example where we use our framework to optimize the structure and some parameters of a neural network implemented
+through [Keras](https://github.com/keras-team/keras).
 
 ##### Creating Nodes
 Nodes are instances of the class *hg.Node*. However, there a number of shortcuts and tricks to define nodes using
-standard python functions. Let's for instance declare a Keras model where some parameters and connections
+standard python functions. Let's, for instance, declare a Keras model where some parameters and connections
 between the layers are dynamic.
-Here is a code snippet with the declaration of the first node (node is meant in the hypegraph context):
+Here is a code snippet showing the declaration of the first node (note that node is meant in the hypegraph context, layer instead is used to distinguish Keras' parts):
 ```python
 import hypergraph as hg
 from keras.layers import Dense, Dropout, GlobalAveragePooling2D, GlobalMaxPooling2D
@@ -54,15 +60,19 @@ def classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_r
     net = Dropout(rate=dropout_rate)(net)
     return Dense(class_count, activation='softmax')(net)
 ```
-First of all, to declare a node we define a function with the decorator *@hg.function()*, this is just necessary
+First of all, to declare a functional node we define a function decorated with *@hg.function()*, this is just necessary
 to install hypergraph's fine machinery around the function. 
-TODO explain tweaks...
+The tweaks related to the current function are then declared using the decorator *@hg.decl_tweaks()* where the variable associated to the tweak is passed alongside its prior distribution.
+The framework will then call the function with the parameters sampled according to the optimization strategy. The input parameters that are not declared as tweaks are instead retrieved by Hypergraph
+from the inputs to the node.
 
 ![graph and tweaks example](./doc/keras-tweaks-example.png)
 
 __Figure 1__ The node created by *classifier_terminal_part* with its internal tweaks and their interaction with the various parts.
 
-#### Putting all together, the graph
+Similarly we define all the other nodes, for a complete source code please follow this link [keras_classifier1.py](examples/keras_classifier1.py)
+
+##### Putting all together, the graph
 The following snippet provides an overview of building graphs with Hypergraph.
 The features highlighted include:
 - To create a graph, simply call hg.Graph().
