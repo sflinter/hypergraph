@@ -701,9 +701,10 @@ def function():
 
 
 @export
-def aggregator():
+def aggregator(on_enter=None):
     """
     A decorator to be used to 'mark' a function as graph factory.
+    :param on_enter: a node or a list of nodes to be executed prior any other node in the graph.
     :return:
     """
     def real_decorator(func):
@@ -713,6 +714,8 @@ def aggregator():
 
             graph1 = Graph(name=name)
             with graph1.as_default():
+                if on_enter is not None:
+                    add_event_handler('enter', deps=on_enter)
                 output() << func(**kwargs)
             return graph1
 

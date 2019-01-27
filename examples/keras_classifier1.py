@@ -6,6 +6,10 @@ import hypergraph as hg
 from keras.layers import Dense, GlobalAveragePooling2D, GlobalMaxPooling2D, Dropout, Input, Conv2D,\
     BatchNormalization, Activation
 from keras.optimizers import Adam, RMSprop
+import pandas as pd
+import matplotlib.pyplot as plt
+from hypergraph.genetic import MutationOnlyEvoStrategy
+from hypergraph.optimizer import History, ConsoleLog
 
 
 @hg.function()
@@ -66,16 +70,38 @@ def keras_clear_session():
     KBackend.clear_session()
 
 
+@hg.function()
+def input_layer_():
+    return Input(None, None, 3)
+
+
 # Finally we put all together by connecting the various components declared above as nodes of a graph.
-@hg.aggregator()
+@hg.aggregator(on_enter=keras_clear_session())
 def model_graph():
-    hg.add_event_handler('enter', deps=hg.call(keras_clear_session))
-    input_layer = hg.call(lambda: Input(None, None, 3))
+    input_layer = input_layer_()
     top_section = features_extraction_net(input_layer=input_layer)
     bottom_section = classifier_terminal_part(input_layer=top_section)
     model = compile_model(input_layer=input_layer, output_layer=bottom_section)
     return model
 
 
-graph = model_graph()
-# TODO more to come...
+graph1 = model_graph()  # create a graph
+
+
+def fitness(individual):
+    model = hg.run(graph1, tweaks=individual)
+    # TODO to be completed
+    raise NotImplementedError()
+
+
+history = History()     # the history callback records the evolution of the algorithm
+strategy = MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='min',
+                                   generations=50, mutation_prob=0.1, lambda_=4,
+                                   callbacks=[ConsoleLog(), history])
+strategy()  # run the evolutionary strategy
+print()
+print("best:" + str(strategy.best))     # print a dictionary with the tweaks that determined the best performance
+
+history = pd.DataFrame(history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
+history.plot(x='gen_idx', y=['best_score', 'population_mean_score'])
+plt.show()

@@ -73,33 +73,25 @@ __Figure 1__ The node created by *classifier_terminal_part* with its internal tw
 Similarly we define all the other nodes, for a complete source code please follow this link [keras_classifier1.py](examples/keras_classifier1.py)
 
 ##### Putting all together, the graph
-The following snippet provides an overview of building graphs with Hypergraph.
-The features highlighted include:
-- To create a graph, simply call hg.Graph().
-- To add nodes to your graph the graph.as_default() method can be used. 
-- For flexibility, graphs support dictionary inputs which allows for
-multiple inputs to easily be supplied to and specified within a graph.
-- The notation __<<__ indicates node inputs, therefore, _a_ __<<__ _b_ indicates
-that the node _b_ is input to _a_. 
-- Finally, the output of the graph is specified by using the designated
-identity node hg.output(). 
-
-TODO explain the main difference between hg.function and hg.aggregator
+Finally, it is time to put together the various nodes. The decorator *@hg.aggregator()* is meant for this purpose. Again we define a function
+and we invoke the node functions as regular python functions. The magic that is happening here is that the invocations are intercepted by the framework and the returned values are not the
+actual values but rather expressions. This allows hypergraph to understand the structure of the statements and at the moment of the real execution, substitute the tweaks and invoke the functions along
+the active path. 
 
 ```python
-my_first_graph = hg.Graph('my_first_graph')  # create your graph
-with my_first_graph.as_default():  # add your nodes to the graph
-    input = hg.input_key('input')
+import hypergraph as hg
 
-    func_node_result = (hg.call(np.multiply) << [input, 2])  # calling an existing function to create a node
-
-    custom_node_result = MyFirstNode('custom_node') << func_node_result # Calling the custom built function
-
-    hg.output() << custom_node_result  # setting the output of the graph
-
-y = my_first_graph(input={'input': 2})  # run your graph
-print(y)  # see your answer
+@hg.aggregator(on_enter=keras_clear_session())
+def model_graph():
+    input_layer = input_layer_()
+    top_section = features_extraction_net(input_layer=input_layer)
+    bottom_section = classifier_terminal_part(input_layer=top_section)
+    model = compile_model(input_layer=input_layer, output_layer=bottom_section)
+    return model
 ```
+
+The key difference between functions annotated with *@hg.function()* versus *@hg.aggregator()* is that in the first case the parameters and invocations within the function body
+handle the real objects and values that are part of the information flow among nodes. In the latter instead, the invocations return expressions involving the type *hg.Node*.
 
 ## Main Concepts
 
