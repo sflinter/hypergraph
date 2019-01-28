@@ -1,6 +1,5 @@
 import keras
 import hypergraph as hg
-from hypergraph.genetic import MutationOnlyEvoStrategy
 from hypergraph.optimizer import History, ConsoleLog
 import time
 import numpy as np
@@ -84,9 +83,9 @@ def fitness(individual):
 
 
 history = History()
-strategy = MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='min',
-                                   generations=50, mutation_prob=0.1, lambda_=4,
-                                   callbacks=[ConsoleLog(), history])
+strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='min',
+                                              generations=50, mutation_prob=0.1, lambda_=4,
+                                              callbacks=[ConsoleLog(), history])
 strategy()
 print()
 print("best:" + str(strategy.best))

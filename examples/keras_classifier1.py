@@ -1,15 +1,32 @@
 # New example under construction...
 
 import keras
+from keras.datasets import cifar10
 from keras import backend as KBackend
 import hypergraph as hg
 from keras.layers import Dense, GlobalAveragePooling2D, GlobalMaxPooling2D, Dropout, Input, Conv2D,\
-    BatchNormalization, Activation
+    Activation, MaxPooling2D
+from keras import Sequential
 from keras.optimizers import Adam, RMSprop
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from hypergraph.genetic import MutationOnlyEvoStrategy
 from hypergraph.optimizer import History, ConsoleLog
+
+
+# The data, split between train and test sets:
+(x_train, y_train), (x_test, y_test) = cifar10.load_data()
+print('x_train shape:', x_train.shape)
+print(x_train.shape[0], 'train samples')
+print(x_test.shape[0], 'test samples')
+class_count = np.max(y_train) + 1
+
+# Convert class vectors to binary class matrices.
+y_train = keras.utils.to_categorical(y_train, class_count)
+y_test = keras.utils.to_categorical(y_test, class_count)
+
+
+
 
 
 @hg.function()
@@ -56,13 +73,26 @@ def compile_model(input_layer, output_layer, optimizer, lr):
 @hg.function()
 def features_extraction_net(input_layer):
     """
-    A features extraction network, this is here and kept simple just for demonstrative purposes.
+    A features extraction network, this is kept simple just for demonstrative purposes.
     :param input_layer:
     :return:
     """
-    net = Conv2D(filters=64, kernel_size=(7, 7), strides=(2, 2), padding='same')(input_layer)
-    net = BatchNormalization(axis=3)(net)
-    return Activation("relu")(net)
+
+    # TODO use input_layer
+    model = Sequential()
+    model.add(Conv2D(32, (3, 3), padding='same', input_shape=x_train.shape[1:]))
+    model.add(Activation('relu'))
+    model.add(Conv2D(32, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+
+    model.add(Conv2D(64, (3, 3), padding='same'))
+    model.add(Activation('relu'))
+    model.add(Conv2D(64, (3, 3)))
+    model.add(Activation('relu'))
+
+    return model
 
 
 @hg.function()
@@ -72,15 +102,15 @@ def keras_clear_session():
 
 @hg.function()
 def input_layer_():
-    return Input(None, None, 3)
+    return Input((None, None, 3))
 
 
 # Finally we put all together by connecting the various components declared above as nodes of a graph.
-@hg.aggregator(on_enter=keras_clear_session())
+@hg.aggregator(on_enter=keras_clear_session)
 def model_graph():
     input_layer = input_layer_()
     top_section = features_extraction_net(input_layer=input_layer)
-    bottom_section = classifier_terminal_part(input_layer=top_section)
+    bottom_section = classifier_terminal_part(input_layer=top_section, class_count=class_count)
     model = compile_model(input_layer=input_layer, output_layer=bottom_section)
     return model
 
@@ -89,18 +119,21 @@ graph1 = model_graph()  # create a graph
 
 
 def fitness(individual):
+    print(f'Trial, tweaks={individual}')
     model = hg.run(graph1, tweaks=individual)
-    # TODO to be completed
-    raise NotImplementedError()
+    history = model.fit_generator(MyGenerator(class_count=class_count), epochs=4,
+                                  validation_data=MyGenerator(class_count=class_count))
+    return np.mean(history.history['val_acc'])
+    # TODO mention that there will be resources allocation layer...
 
 
 history = History()     # the history callback records the evolution of the algorithm
-strategy = MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='min',
-                                   generations=50, mutation_prob=0.1, lambda_=4,
-                                   callbacks=[ConsoleLog(), history])
+strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='max',
+                                              generations=50, mutation_prob=0.1, lambda_=4,
+                                              callbacks=[ConsoleLog(), history])
 strategy()  # run the evolutionary strategy
 print()
-print("best:" + str(strategy.best))     # print a dictionary with the tweaks that determined the best performance
+print("best:" + str(strategy.best))     # print a dictionary containing the tweaks that determined the best performance
 
 history = pd.DataFrame(history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
 history.plot(x='gen_idx', y=['best_score', 'population_mean_score'])
