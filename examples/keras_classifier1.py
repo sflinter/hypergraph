@@ -21,12 +21,13 @@ print(x_train.shape[0], 'train samples')
 print(x_test.shape[0], 'test samples')
 class_count = np.max(y_train) + 1
 
+subsample_idxs = np.random.permutation(len(x_train))[:5000]
+x_train = x_train[subsample_idxs]
+y_train = y_train[subsample_idxs]
+
 # Convert class vectors to binary class matrices.
 y_train = keras.utils.to_categorical(y_train, class_count)
 y_test = keras.utils.to_categorical(y_test, class_count)
-
-
-
 
 
 @hg.function()
@@ -78,21 +79,15 @@ def features_extraction_net(input_layer):
     :return:
     """
 
-    # TODO use input_layer
-    model = Sequential()
-    model.add(Conv2D(32, (3, 3), padding='same', input_shape=x_train.shape[1:]))
-    model.add(Activation('relu'))
-    model.add(Conv2D(32, (3, 3)))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
+    net = Conv2D(32, (3, 3), padding='same', activation='relu')(input_layer)
+    net = Conv2D(32, (3, 3), activation='relu')(net)
+    net = MaxPooling2D(pool_size=(2, 2))(net)
+    net = Dropout(0.25)(net)
 
-    model.add(Conv2D(64, (3, 3), padding='same'))
-    model.add(Activation('relu'))
-    model.add(Conv2D(64, (3, 3)))
-    model.add(Activation('relu'))
+    net = Conv2D(64, (3, 3), padding='same', activation='relu')(net)
+    net = Conv2D(64, (3, 3), activation='relu')(net)
 
-    return model
+    return net
 
 
 @hg.function()
@@ -102,7 +97,7 @@ def keras_clear_session():
 
 @hg.function()
 def input_layer_():
-    return Input((None, None, 3))
+    return Input(shape=x_train.shape[1:], name='input1')
 
 
 # Finally we put all together by connecting the various components declared above as nodes of a graph.
@@ -119,17 +114,17 @@ graph1 = model_graph()  # create a graph
 
 
 def fitness(individual):
+    # TODO bug bug bug MutationOnlyEvoStrategy sometimes is generating identical configs per trial
     print(f'Trial, tweaks={individual}')
     model = hg.run(graph1, tweaks=individual)
-    history = model.fit_generator(MyGenerator(class_count=class_count), epochs=4,
-                                  validation_data=MyGenerator(class_count=class_count))
+    history = model.fit(x=x_train, y=y_train, epochs=1, validation_data=(x_test, y_test))
     return np.mean(history.history['val_acc'])
     # TODO mention that there will be resources allocation layer...
 
 
 history = History()     # the history callback records the evolution of the algorithm
 strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='max',
-                                              generations=50, mutation_prob=0.1, lambda_=4,
+                                              generations=10, mutation_prob=(0.1, 0.8), lambda_=4,
                                               callbacks=[ConsoleLog(), history])
 strategy()  # run the evolutionary strategy
 print()
