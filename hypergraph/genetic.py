@@ -267,7 +267,15 @@ class MutationOnlyEvoStrategy:
             pf = lambda: p
 
         mut = self.gene.mutations
-        return [opt.Individual(mut(parent, prob=pf(), groups_prob=gp), gen_id=gen_id) for _ in range(self.lambda_)]
+
+        max_trials = 1000
+        for t in range(max_trials):
+            ret = [opt.Individual(mut(parent, prob=pf(), groups_prob=gp), gen_id=gen_id) for _ in range(self.lambda_)]
+            # TODO if len(set([frozenset(k.gene.items()) for k in ret])) != self.lambda_:   # check uniqueness of the children
+            # TODO    continue
+            # Problem here, some values may be unhashable
+            return ret
+        raise RuntimeError()
 
     def __call__(self):
         self.reset()

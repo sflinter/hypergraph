@@ -12,7 +12,7 @@ The result is a network of nodes composed by "moving parts" which can be somehow
 The "moving parts" of the structure are called tweaks. The optimization algorithms require a measure of
 fitness, which is user-defined, to understand the effect of each tweak on the task to be optimized.
 
-The purpose of the project is purely experimental and we are willing to get any contribution and comment. 
+The purpose of the project is purely experimental and we are willing to accept any contribution and comment. 
 
 ## Getting Started  with Hypergraph
 ##### Installation
@@ -26,10 +26,11 @@ pip install git+https://github.com/aljabr0/hypergraph
 #### Hypergraph and Keras in action
 
 The core data structure of Hypergraph is a directed __graph__. Each graph consists of a number of 
-__nodes__, the information in form of python objects, flows from the inputs, gets transformed and continues toward the single output that each node has.
-Methods of creating nodes and adding them to a graph are demonstrated in the next sections. We start with a relatively
+__nodes__. The information in form of python objects, flows from the inputs, gets transformed and continues toward the single output that each node has.
+Methods for creating nodes and adding them to a graph are demonstrated in the next sections. We start with a relatively
 simple example where we use our framework to optimize the structure and some parameters of a neural network implemented
-through [Keras](https://github.com/keras-team/keras).
+through [Keras](https://github.com/keras-team/keras). Despite we used Keras in all examples related to neural networks,
+Hypergraph is completely agnostic to the various deep learning frameworks. 
 
 ##### Creating Nodes
 Nodes are instances of the class *hg.Node*. However, there a number of shortcuts and tricks to define nodes using
@@ -61,8 +62,8 @@ def classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_r
     return Dense(class_count, activation='softmax')(net)
 ```
 First of all, to declare a functional node we define a function decorated with *@hg.function()*, this is just necessary
-to install hypergraph's fine machinery around the function. 
-The tweaks related to the current function are then declared using the decorator *@hg.decl_tweaks()* where the variable associated to the tweak is passed alongside its prior distribution.
+to install Hypergraph's fine machinery around the function. 
+The tweaks related to the current function are then declared using the decorator *@hg.decl_tweaks()*. Here the variable associated to the tweak is passed alongside its prior distribution.
 The framework will then call the function with the parameters sampled according to the optimization strategy. The input parameters that are not declared as tweaks are instead retrieved by Hypergraph
 from the inputs to the node.
 
@@ -74,7 +75,7 @@ Similarly we define all the other nodes, for a complete source code please follo
 
 ##### Putting all together, the graph
 Finally, it is time to put together the various nodes. The decorator *@hg.aggregator()* is meant for this purpose. Again we define a function
-and we invoke the node functions as regular python functions. The magic that is happening here is that the invocations are intercepted by the framework and the returned values are not the
+and we invoke the nodes functions as regular python functions. The magic that is happening here is that the invocations are intercepted by the framework and the returned values are not the
 actual values but rather expressions. This allows hypergraph to understand the structure of the statements and at the moment of the real execution, substitute the tweaks and invoke the functions along
 the active path. 
 
@@ -93,74 +94,53 @@ def model_graph():
 The key difference between functions annotated with *@hg.function()* versus *@hg.aggregator()* is that in the first case the parameters and invocations within the function body
 handle the real objects and values that are part of the information flow among nodes. In the latter instead, the invocations return expressions involving the type *hg.Node*.
 
-## Main Concepts
+##### Invoke the optimization algorithm
+Once the graph structure is ready we instantiate the graph and run the optimization algorithm on its tweaks.
+At this point we need a measure of fitness to be applied to each 'tweaked' graph. The fitness function also takes care of the execution of the model. The code snippet below shows
+the simple steps necessary to define a fitness and run an evolutionary algorithm.
 
-#### High Level of Abstraction
+```python
+graph1 = model_graph()  # create a graph
 
-Hypergraph allows for structures of arbitrary complexity to be constructed with 
-relative ease. This in part is due to the ability to connect nodes.
- 
- In the case of deep neural networks, this means that
-different building blocks (containing multiple layers) can be readily connected. 
 
-As shown in [this example](examples/keras_exec_opt1.py) it is also possible 
-to use Hypergraph to optimise training parameters (such as queue size, batch size and the number of workers) 
+def fitness(individual):
+    print(f'Trial, tweaks={individual}')
+    model = hg.run(graph1, tweaks=individual)
+    history = model.fit(x=x_train, y=y_train, epochs=4, validation_data=(x_test, y_test))
+    # The number of epochs here could be handled by resources allocation algorithms such as Hyperband.
+    # This feature will be soon available on hypergraph.
+    return np.max(history.history['val_acc'])
+
+
+history = History()     # the history callback records the evolution of the algorithm
+strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='max',
+                                              generations=20, mutation_prob=(0.1, 0.8), lambda_=4,
+                                              callbacks=[ConsoleLog(), history])
+strategy()  # run the evolutionary strategy
+print("best:" + str(strategy.best))     # print a dictionary containing the tweaks that determined the best performance
+```
+
+When the optimization algorithm reaches its stop condition we can extract the best set of tweaks through the field *best*. Given a set of tweaks
+we can execute the graph with the configuration applied through the call *hg.run(graph1, tweaks=best)*.
+
+![keras-hyperparam-opt-fitness-evolution](./doc/keras-hyperparam-opt-fitness-evolution.png)
+
+__Figure 2__ The evolution of the fitness over 20 generations.
+
+As shown in [this example](examples/keras_exec_opt1.py) it is also possible to use Hypergraph to optimise training parameters (such as queue size, batch size and the number of workers)
 to optimise the training time of a Keras model. 
 
-Furthermore, it is possible to create graphs which contain sub-graphs by using the hg.node function as shown in the following snippet.
-
-```python
-sub_graph1 = hg.Graph()
-with sub_graph1.as_default():
-    input = hg.input_key('input1')
-    hg.output() << (hg.call(np.remainder) << [input, 6])  # graph outputs the remainder of the inputs when divided by 6
-
-sub_graph2 = hg.Graph()
-with sub_graph2.as_default():
-    input = hg.input_key('input2')
-    hg.output() << (hg.call(np.divide) << [input, 6]) # graph outputs the value of the inputs divided by 6
-
-graph = hg.Graph()
-with graph.as_default():
-    x = hg.node(sub_graph1) << {'input1':hg.input_all()}
-    y = hg.node(sub_graph2) << {'input2':hg.input_all()}
-    hg.output() << (hg.call(np.multiply) << [x, y]) # graph outputs the product of the two sub_graphs
-
-print(graph([3, 7, 11]))
-```
-
-#### Tweaks
-Hypergraph allows for specified values to be automatically modified
-via optimisation algorithms. This allows for the value of variables be altered with respect to
-user-defined prior distribution. An example of this is the variable _w_ in the snippet below. 
-```python
-w = hg.tweak(hg.Uniform(low=-3, high=3), name='w')
-```
-For a full demonstration of the use of tweaks please see [this example](examples/linear_regr1.py).
-
-#### Meta-heuristic Optimisation
-Hypergraph offers meta-heuristic optimisation routines to optimise graphs and
-networks.
-
-An example of a mutation-only genetic algorithm optimisation routine being applied to a graph
-is presented in this simple example for [linear regression](examples/linear_regr1.py).
-
-## Hypergraph in Action
-#### Cartesian Genetic Programming (CGP)
-In the domain of reinforcement learning, Cartesian Genetic Programming has recently been shown to be a 
-competitive, yet simple, alternative approach for learning to play Atari games
-[(Wilson et al. 2018)](https://arxiv.org/pdf/1806.05695.pdf). 
-
-Hypergraph is very well suited for evolving such solutions which has motivated its implementation.
+#### Beyond hyper-parameters optimization
+Moved by the insatiable desire of exploring new scenarios we extended our framework with Cartesian Genetic Programming algorithms (CGP).
+In the domain of reinforcement learning, Cartesian Genetic Programming has recently been shown to be a competitive, yet simple, alternative approach for learning to play Atari games
+[(Wilson et al. 2018)](https://arxiv.org/pdf/1806.05695.pdf).
+Hypergraph is very well suited for evolving such solutions which have motivated its implementation.
 Additionally, a gym adapter is provided so that OpenAI's gym environments can be easily assessed.
-
-
 A full example of a Hypergraph implementation of CGP for the CartPole(v1) gym environment is 
-provided [here](examples/cgp-gym1.py). The following video is an example of the results from running this example.
+provided [here](examples/cgp-gym1.py). The following animation is an example of the results from running this example.
 
-<div align="center">
-  <a href="https://www.youtube.com/watch?v=gwb_iDRgi28"><img src="https://img.youtube.com/vi/gwb_iDRgi28/0.jpg" alt="CGP Cartpole"></a>
-</div>
+![cgp-perfect-cartpole-solution](./doc/cgp-perfect-cartpole-solution.gif)
 
-It should be noted that both the CGP and optimisation routines are general and can be easily tailored for
-a given problem by specifying a suitable set of operations and an appropriate fitness function.
+__Figure 3__ A perfect solution of the OpenAI CartPole environment obtained through Hypergraph CGP.
+
+It should be noted that both the CGP and optimisation routines are general and can be easily tailored for a given problem by specifying a suitable set of operations and an appropriate fitness function.

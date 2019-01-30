@@ -1,12 +1,15 @@
-# New example under construction...
+# An example where we use Hypergraph to tweak a simple Keras model.
+# Specifically, we optimize the following hyper-parameters:
+# - a global pooling layer (avg vs max)
+# - a dropout layer (we optimize the dropout rate)
+# - the network optimizer (Adam vs RMS)
+# - the learning rate for the optimizer
 
 import keras
 from keras.datasets import cifar10
 from keras import backend as KBackend
 import hypergraph as hg
-from keras.layers import Dense, GlobalAveragePooling2D, GlobalMaxPooling2D, Dropout, Input, Conv2D,\
-    Activation, MaxPooling2D
-from keras import Sequential
+from keras.layers import Dense, GlobalAveragePooling2D, GlobalMaxPooling2D, Dropout, Input, Conv2D, MaxPooling2D
 from keras.optimizers import Adam, RMSprop
 import pandas as pd
 import numpy as np
@@ -15,13 +18,14 @@ from hypergraph.optimizer import History, ConsoleLog
 
 
 # The data, split between train and test sets:
+subsample_size = 5000
 (x_train, y_train), (x_test, y_test) = cifar10.load_data()
 print('x_train shape:', x_train.shape)
 print(x_train.shape[0], 'train samples')
 print(x_test.shape[0], 'test samples')
 class_count = np.max(y_train) + 1
 
-subsample_idxs = np.random.permutation(len(x_train))[:5000]
+subsample_idxs = np.random.permutation(len(x_train))[:subsample_size]
 x_train = x_train[subsample_idxs]
 y_train = y_train[subsample_idxs]
 
@@ -33,8 +37,8 @@ y_test = keras.utils.to_categorical(y_test, class_count)
 @hg.function()
 # Declare the first tweak as a uniform choice between two types of global pooling
 @hg.decl_tweaks(global_pool_op=hg.tweaks.UniformChoice((GlobalAveragePooling2D, GlobalMaxPooling2D)))
-# the second tweak is the dropout rate which will be a uniform value between 0 and 0.5
-@hg.decl_tweaks(dropout_rate=hg.tweaks.Uniform(0, 0.5))
+# the second tweak is the dropout rate which will be a uniform value between 0 and 0.25
+@hg.decl_tweaks(dropout_rate=hg.tweaks.Uniform(0, 0.25))
 def classifier_terminal_part(input_layer, class_count, global_pool_op, dropout_rate):
     """
     Create the terminal part of the model. This section is composed by a global pooling layer followed by a dropout
@@ -114,17 +118,17 @@ graph1 = model_graph()  # create a graph
 
 
 def fitness(individual):
-    # TODO bug bug bug MutationOnlyEvoStrategy sometimes is generating identical configs per trial
     print(f'Trial, tweaks={individual}')
     model = hg.run(graph1, tweaks=individual)
-    history = model.fit(x=x_train, y=y_train, epochs=1, validation_data=(x_test, y_test))
-    return np.mean(history.history['val_acc'])
-    # TODO mention that there will be resources allocation layer...
+    history = model.fit(x=x_train, y=y_train, epochs=4, validation_data=(x_test, y_test))
+    # The number of epochs here could be handled by resources allocation algorithms such as Hyperband.
+    # This feature will be soon available on hypergraph.
+    return np.max(history.history['val_acc'])
 
 
 history = History()     # the history callback records the evolution of the algorithm
 strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='max',
-                                              generations=10, mutation_prob=(0.1, 0.8), lambda_=4,
+                                              generations=20, mutation_prob=(0.1, 0.8), lambda_=4,
                                               callbacks=[ConsoleLog(), history])
 strategy()  # run the evolutionary strategy
 print()
