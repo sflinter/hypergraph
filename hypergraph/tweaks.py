@@ -5,15 +5,41 @@ import numpy as np
 import copy
 import math
 import msgpack
+import pandas as pd
+
+
+def dump_tweaks(source: [dict, g.Graph]):
+    """
+    Pretty-print a table of tweaks
+    :param source: A dict containing tweaks or a graph
+    :return:
+    """
+    if isinstance(source, g.Graph):
+        source = source.get_tweaks_config()
+    if not isinstance(source, dict):
+        raise ValueError()
+    source = list(source.items())
+    with pd.option_context('display.max_rows', None, 'max_colwidth', 120):
+        print(pd.DataFrame.from_records(source, columns=('tweak_id', 'config')))
 
 
 @export
 class Distribution(ABC):
-    def __init__(self, space_descriptor):
+    def __init__(self, space_descriptor, name=None):
+        """
+        The constructor
+        :param space_descriptor: A dictionary containing a descriptor of the distribution's space
+        :param name: The name of the distribution. If not specified then the class name is used instead. This
+        identifier is mainly used for debug purposes.
+        """
+
         self._space_descriptor = space_descriptor
         # The group property is used to assemble different sets of distributions. This is used for example
         # in cgp to assign different probabilities to different groups of distributions.
         self.group = None
+        if name is None:
+            name = type(self).__name__
+        self.name = name
 
     @abstractmethod
     def sample(self):
@@ -23,8 +49,8 @@ class Distribution(ABC):
     def space_descriptor(self):
         return copy.copy(self._space_descriptor)
 
-    # TODO def sample_from_uniform(v) where v is a value in [0, 1]
-    # TODO operator 'in'
+    def __repr__(self):
+        return str({'type': self.name, 'space': self._space_descriptor})
 
 
 # TODO g.Graph.adapters[FuncTweaksDecl] = None
@@ -48,11 +74,13 @@ def decl_tweaks(**key_tweak_pairs):
 
 
 class Aggregation(Distribution):
-    """
-    An aggregation of independent random variables of the same type
-    """
-
     def __init__(self, base: Distribution, size):
+        """
+        An aggregation of independent random variables of the same type
+        :param base: The base distribution to be used for each variable
+        :param size: The shape of the space containing the random variables following the distribution
+        of the parameter base
+        """
         if isinstance(base, Aggregation):
             raise ValueError('The base distribution of an Aggregation cannot be an Aggregation itself')
         self.base = base
@@ -81,6 +109,11 @@ class Aggregation(Distribution):
 @export
 class Constant(Distribution):
     def __init__(self, value):
+        """
+        A Dummy distribution that returns a constant value
+        :param value: The constant value returned by the distribution
+        """
+
         self.value = value
         super().__init__(space_descriptor={'type': 'categorical', 'size': 1})
 
@@ -90,8 +123,6 @@ class Constant(Distribution):
 
 @export
 class UniformChoice(Distribution):
-    # TODO random subset and different probs for each value
-
     def __init__(self, values=(), group=None):
         values = list(values)
         self.values = values

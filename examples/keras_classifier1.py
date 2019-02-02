@@ -115,6 +115,7 @@ def model_graph():
 
 
 graph1 = model_graph()  # create a graph
+hg.tweaks.dump_tweaks(graph1)   # dump the tweaks config for inspection
 
 
 def fitness(individual):

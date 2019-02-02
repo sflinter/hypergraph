@@ -89,10 +89,23 @@ def model_graph():
     bottom_section = classifier_terminal_part(input_layer=top_section)
     model = compile_model(input_layer=input_layer, output_layer=bottom_section)
     return model
+    
+graph1 = model_graph()  # create a graph
+hg.tweaks.dump_tweaks(graph1)   # dump the tweaks config for inspection
 ```
 
 The key difference between functions annotated with *@hg.function()* versus *@hg.aggregator()* is that in the first case the parameters and invocations within the function body
 handle the real objects and values that are part of the information flow among nodes. In the latter instead, the invocations return expressions involving the type *hg.Node*.
+
+Here is the output of the *dump_tweaks* from the last code snippet. It is interesting to notice how the tweaks are collected and uniquely identified by the framework.
+
+Tweak id | Config
+--- | ---
+model_graph.classifier_terminal_part.dropout_rate | 'type': 'Uniform', 'space': {'type': 'continuous', 'boundaries': (0, 0.25)}
+model_graph.classifier_terminal_part.global_pool_op | 'type': 'UniformChoice', 'space': {'type': 'categorical', 'size': 2}
+model_graph.compile_model.lr | 'type': 'LogUniform', 'space': {'type': 'continuous', 'boundaries': (1e-05, 0.1)}
+model_graph.compile_model.optimizer | 'type': 'UniformChoice', 'space': {'type': 'categorical', 'size': 2}
+
 
 ##### Invoke the optimization algorithm
 Once the graph structure is ready we instantiate the graph and run the optimization algorithm on its tweaks.
