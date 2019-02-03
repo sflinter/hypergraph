@@ -8,7 +8,6 @@ from collections import deque
 import types
 import weakref
 from .utils import export
-import inspect
 import uuid
 import pandas as pd
 
@@ -47,7 +46,7 @@ class ExecutionContext:
     @classmethod
     def get_default(cls, auto_init=True):
         """
-        Returns the execution context. If there is no default context then a new one is instantiated
+        Return the default execution context. If there is no default context then a new one is instantiated
         :return:
         """
         if (cls._default is None) and auto_init:
@@ -57,7 +56,7 @@ class ExecutionContext:
     @classmethod
     def reset_default(cls):
         """
-        Resets the default execution context
+        Reset the default execution context
         :return:
         """
         cls._default = None
@@ -65,7 +64,8 @@ class ExecutionContext:
     @contextmanager
     def as_default(self):
         """
-        Returns a context manager that sets this context as default
+        Return a context manager that sets this context as default. The previous default context is saved and restored
+        at the end.
         :return: A context manager
         """
         prev_default = ExecutionContext._default
@@ -106,9 +106,18 @@ class ExecutionContext:
 
 @export
 class Node(ABC):
+    """
+    Node is the atomic component of a graph. All nodes of a graph extend this class.
+    """
+
     _id_counter = itertools.count()
 
     def __init__(self, name=None, flags=()):
+        """
+        Init a node. It is important to know that this constructor immediately associates a node to the current active graph.
+        :param name: An optional name for the node, if not provided it will be automatically generated.
+        :param flags:
+        """
         if name is None:
             name = 'node-'+str(next(self._id_counter))
         if not isinstance(name, str):
@@ -123,6 +132,11 @@ class Node(ABC):
 
     @staticmethod
     def get_name(node) -> str:
+        """
+        Given a node of a nodeId return its name
+        :param node: A node or a nodeId
+        :return: The name associated with the node or nodeId
+        """
         if isinstance(node, Node) or isinstance(node, NodeId):
             return node.name
         raise ValueError('The input param must be either a NodeId or a Node, '
@@ -130,6 +144,12 @@ class Node(ABC):
 
     @staticmethod
     def nodeId(node):
+        """
+        Given a node or a nodeId return a nodeId representing the argument. If the argument is a nodeId then the same
+        it is returned.
+        :param node: A node or nodeId.
+        :return: A nodeId.
+        """
         if isinstance(node, NodeId):
             return node
         if isinstance(node, Node):
@@ -139,15 +159,17 @@ class Node(ABC):
 
     @property
     def name(self) -> str:
+        """
+        Return the name of the current node.
+        :return:
+        """
         return self._name
-
-    def get_contextual_descriptor(self, desc_ctx):  # TODO remove
-        return None
 
     @property
     def fully_qualified_name(self) -> str:  # TODO rename fq_name
         """
-        Return the fully qualified node name
+        Return the fully qualified node name. The fully qualified node name has the following form:
+        <graph name>.<node name>
         :return:
         """
         g = self.parent
@@ -236,12 +258,28 @@ class Node(ABC):
         return get_key(key, _input=self)
 
     def __lshift__(self, other):    # TODO do the same with NodeId!!!
+        """
+        Connect the current node with its input. This is one of the most important methods of the entire framework.
+        Here are some examples:
+        node1 << node2 # the output of node2 is the input of node1
+        node1 << {'a': node2, 'b': node3} # the input of node1 is a dictionary where the outputs of the nodes node2 and node3
+        are substituted as values of the keys 'a' and 'b' respectively.
+        node1 << (node2 << node3) # the output of node3 is the input of node2 and the output of node2 is the input of node1
+        note the use of parenthesis.
+        :param other: A node or a complex structure of lists and dictionaries
+        :return:
+        """
         if isinstance(other, Dependency):
             other.inject(self)
             return self
         return link(self, other)
 
     def as_dict(self):  # TODO -> DictFlavor (when we'll switch to python 3.7)
+        """
+        Connect the output of this node to the input of a DictFlavor node. A DictFlavor is characterized by a
+        dict-like behaviour, see the class DictFlavor for more information.
+        :return:
+        """
         return link(DictFlavor(), self)
 
     def serialize(self):

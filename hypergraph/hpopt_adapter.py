@@ -1,3 +1,6 @@
+# A series of adapters to access some important algorithms of the notorious hyperopt, a well-established library
+# for hyper-parameters optimization.
+
 import hyperopt as hp
 from . import tweaks as Tweaks
 from .utils import HGError

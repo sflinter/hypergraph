@@ -568,18 +568,16 @@ class Cell(hgg.Node):
             prefix + '_p': tweaks.Uniform(low=-1.0, high=1.0)     # TODO get distribution from operators
         }
 
-    # TODO call to resolve tweaks from serialized version to operative one
-
-    def get_contextual_descriptor(self, desc_ctx):
-        ctx = hgg.ExecutionContext.get_default(auto_init=False)
-        if ctx is None:
-            return super().get_contextual_descriptor(desc_ctx)
-
-        if desc_ctx == 'hg.cgp.formula':
-            f = ctx.tweaks.get(self.fully_qualified_name + '_f')
-            if f is not None:
-                return f.__name__
-        return super().get_contextual_descriptor(desc_ctx)
+    # def get_contextual_descriptor(self, desc_ctx):
+    #    ctx = hgg.ExecutionContext.get_default(auto_init=False)
+    #    if ctx is None:
+    #        return super().get_contextual_descriptor(desc_ctx)
+    #
+    #    if desc_ctx == 'hg.cgp.formula':
+    #        f = ctx.tweaks.get(self.fully_qualified_name + '_f')
+    #        if f is not None:
+    #            return f.__name__
+    #    return super().get_contextual_descriptor(desc_ctx)
 
     def resolve_tweaks(self, tweaks):
         key = self.fully_qualified_name + '_f'

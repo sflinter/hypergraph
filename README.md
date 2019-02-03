@@ -111,6 +111,7 @@ model_graph.compile_model.optimizer | 'type': 'UniformChoice', 'space': {'type':
 Once the graph structure is ready we instantiate the graph and run the optimization algorithm on its tweaks.
 At this point we need a measure of fitness to be applied to each 'tweaked' graph. The fitness function also takes care of the execution of the model. The code snippet below shows
 the simple steps necessary to define a fitness and run an evolutionary algorithm.
+In this case, we are employing a genetic algorithm, this is just for demonstration purposes, indeed the framework can be easily extended and other optimization methods will be included.
 
 ```python
 graph1 = model_graph()  # create a graph
