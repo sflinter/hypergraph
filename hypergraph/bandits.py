@@ -1,3 +1,5 @@
+# Multi-armed bandit-based algorithms
+
 import numpy as np
 from .genetic import GeneticBase
 

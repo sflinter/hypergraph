@@ -1,3 +1,5 @@
+# Genetic algorithms for the Hypergraph platform.
+
 import numpy as np
 from . import graph as hgg
 from . import tweaks
@@ -10,13 +12,13 @@ from datetime import datetime
 
 class GeneticBase:
     """
-    Base class for genetic algorithms applied to the Graph structure. This class contains a phenotype
-    composed by a dictionary of key:distribution pairs.
+    Basic routines for genetic algorithms. This class contains a phenotype composed by a dictionary
+    of <key>:<distribution> pairs.
     """
 
     def __init__(self, graph: [hgg.Graph, dict]):
         """
-        Init the object.
+        Init the genetic basic routines by getting a phenotype from either a graph or a dictionary.
         :param graph: The graph used to initialize the phenotype.
         """
 
@@ -240,6 +242,10 @@ class MutationOnlyEvoStrategy:
         self._best = None
 
     def reset(self):
+        """
+        Reset the optimizer
+        :return:
+        """
         self.population = None
         self.last_gen_id = -1
         self._best = None
@@ -278,6 +284,10 @@ class MutationOnlyEvoStrategy:
         raise RuntimeError()
 
     def __call__(self):
+        """
+        Run the optimizer.
+        :return:
+        """
         self.reset()
 
         for callback in self.callbacks:

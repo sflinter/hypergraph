@@ -47,6 +47,12 @@ class Distribution(ABC):
 
     @property
     def space_descriptor(self):
+        """
+        Return the space descriptor for the current distribution. The descriptor is a dictionary with the following
+        form: {'type': <type>, 'size': <size>}, where <type> can be either 'categorical' or 'continuous' and <size>
+        is the shape of the space.
+        :return: A dictionary containing the descriptor
+        """
         return copy.copy(self._space_descriptor)
 
     def __repr__(self):
@@ -290,7 +296,9 @@ class Sample(g.Node):
 
 class Switch(g.Node):
     """
-    A node that switches between multiple inputs
+    A node that acts as a switch. One of the inputs is selected and returned. The selection is driven by a tweak that is
+    published by this node. During runtime (in the graph context) only the active path is executed, the nodes on the
+    dead paths are ignored that is they are not executed.
     """
 
     def __init__(self, default=None, name=None, distribution_group=None):

@@ -145,7 +145,7 @@ As shown in [this example](examples/keras_exec_opt1.py) it is also possible to u
 to optimise the training time of a Keras model. 
 
 #### Beyond hyper-parameters optimization
-Moved by the insatiable desire of exploring new scenarios we extended our framework with Cartesian Genetic Programming algorithms (CGP).
+Driven by the insatiable desire of exploring new scenarios we extended our framework with Cartesian Genetic Programming algorithms (CGP).
 In the domain of reinforcement learning, Cartesian Genetic Programming has recently been shown to be a competitive, yet simple, alternative approach for learning to play Atari games
 [(Wilson et al. 2018)](https://arxiv.org/pdf/1806.05695.pdf).
 Hypergraph is very well suited for evolving such solutions which have motivated its implementation.

@@ -30,7 +30,7 @@ def fq_ident(idents, *, sep=FQ_NAME_SEP) -> str:
 @export
 class ExecutionContext:
     """
-    The execution context stores the runtime values of a graph's instance
+    The execution context stores the runtime variables values and tweaks of graphs' instances.
     """
 
     _default = None
@@ -79,6 +79,10 @@ class ExecutionContext:
 
     # TODO node context...
     def __init__(self, tweaks={}):
+        """
+        Initialize an execution context.
+        :param tweaks: The tweaks that will be specified by this context.
+        """
         if not isinstance(tweaks, dict):
             raise ValueError()
         self._vars_per_graph = {}
@@ -334,7 +338,8 @@ class Identity(Node):
 @export
 def mark(name=None) -> Node:
     """
-    Mark is a pseudonym of identity. The idea is to mark internal placeholders (from the graph point of view)
+    Mark is a pseudonym of identity. The idea is to mark (associate a name) internal placeholders
+    (from the graph point of view).
     :param name: The identifier of the identity node
     :return:
     """
@@ -344,7 +349,7 @@ def mark(name=None) -> Node:
 
 class InputPlaceholder(NonExecutable):
     """
-    A node that represents the input of a graph
+    A node that represents the input of a graph.
     """
     def __init__(self, key=None, match_all_inputs=False):
         self.key = key
@@ -408,8 +413,17 @@ def merge(mode):
 
 @export
 class NodeId:
+    """
+    NodeId a class that represents a node by its name. It is used as placeholder for eager declarations, that is
+    when the node object is still not available.
+    """
+
     # TODO include "graph id" (to be decided) although the id can be either fully qualified and relative
     def __init__(self, name):
+        """
+        Init a NodeId.
+        :param name: The name of the node that is represented.
+        """
         if not isinstance(name, str):
             raise ValueError()
         self._name = name
@@ -455,7 +469,7 @@ def node_ref(node):
 
 class GetKeys(Node):
     """
-    Gets elements from lists or dictionaries
+    A node that gets elements from lists or dictionaries given a list of keys or indexes.
     """
 
     def __init__(self, name=None, keys=None, output_type=None):
@@ -497,7 +511,7 @@ class _RuntimeKey:
 
 class GetKey(Node):
     """
-    Get an element from a subscriptable
+    A node that, given a key, gets an element from a subscriptable.
     """
 
     def __init__(self, name=None, key=_RuntimeKey):
@@ -544,6 +558,10 @@ def input_keys(keys, output_type=None):
 
 
 class Dump(Node):
+    """
+    A node that acts as identity and prints the input.
+    """
+
     def __init__(self, name=None):
         super().__init__(name)
 
@@ -552,12 +570,6 @@ class Dump(Node):
         return Dump(name)
 
     def __call__(self, input, hpopt_config={}):
-        """
-        Dump the input and return it so it can be used transparently.
-        :param input:
-        :param hpopt_config:
-        :return:
-        """
         print(input)
         return input
 

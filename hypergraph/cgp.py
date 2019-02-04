@@ -1,7 +1,8 @@
+# Cartesian Genetic Programming algorithms for the Hypergraph framework
+
 import numpy as np
 from functools import partial
 import itertools
-import collections
 import uuid
 import types
 from abc import ABC
@@ -10,7 +11,15 @@ from . import tweaks
 
 
 class Operators(ABC):
+    """
+    Base class for the operators to be used in the grid's nodes.
+    """
+
     def __init__(self, input_count=2):
+        """
+        Init the base class for the grid's operators. The number of inputs for each node is fixed for all nodes.
+        :param input_count: The number of inputs for each node.
+        """
         if not isinstance(input_count, int):
             raise ValueError()
         if input_count < 1:
@@ -40,10 +49,22 @@ class Operators(ABC):
         return self._input_count
 
     def set_selection(self, include=None, exclude=None):
+        """
+        Set the filter for the included/excluded operators. The filter can be set at single operator level
+        or group of them. See the annotation FuncMark for more information on operators grouping.
+        :param include:
+        :param exclude:
+        :return:
+        """
         self.include = include
         self.exclude = exclude
 
     def get_op_by_name(self, name: str):
+        """
+        Return a specific operator's callable by name
+        :param name: The string identifier of the operator
+        :return: The operator's callable
+        """
         if not name.startswith('op_'):
             raise ValueError()
         return getattr(self, name)
@@ -98,9 +119,20 @@ class FuncMark:
 
 
 class DelayOperators(Operators):
+    """
+    An operator that acts as identity (output=input) except that the output is delayed by a certain number
+    of time steps. Actually there are just two delay available, the delay1 and delay2. The two operators
+    postpone the output by one and two time steps respectively. These operators come as a separate class because
+    their generality allows the association with other specific operators.
+    """
+
     SERIALIZER_TYPE = 'hg.cgp.delay_ops.op'
 
     def __init__(self, parent: Operators):
+        """
+        Init the delay operators and install them into a parent set of operators
+        :param parent: A parent set of operators
+        """
         if not isinstance(parent, Operators):
             raise ValueError()
         if parent.input_count <= 0:
@@ -279,6 +311,9 @@ class TensorOperators(Operators):
     @classmethod
     @FuncMark('math')
     def op_add(cls, x, y, p):
+        """
+        Arithmetic addition normalized, (a + b)/2.0
+        """
         return cls.binary_op(lambda a, b: (a + b)/2.0, x, y)
 
     @classmethod
@@ -545,6 +580,10 @@ def exec_symbolically(graph: hgg.Graph, tweaks={}):     # TODO move all to graph
 
 
 class Cell(hgg.Node):
+    """
+    A node representing an operator's cell. This is one of the main components of the CGP grid.
+    """
+
     SYMBOLIC_TWEAK = '__hg__.cgp.symbolic'
 
     def __init__(self, operators: Operators, op_distr=None, name=None):
@@ -714,7 +753,7 @@ class RegularGrid:
         grid = np.stack(grid).T  # grid: [[i1, j1], [i2, j2], ...]
         return grid
 
-    def create_inputs(self):
+    def _create_inputs(self):
         # TODO check that we have at least ops.input_count inputs
         ops = self.operators
 
@@ -738,7 +777,11 @@ class RegularGrid:
         ops = self.operators
         return v + [ops.null_value]*(ops.input_count-len(v))
 
-    def __call__(self):
+    def __call__(self) -> hgg.Graph:
+        """
+        Execute the grid factory. A graph is returned.
+        :return: The graph representing the CGP grid.
+        """
         ops = self.operators
         cname = self.get_comp_name
         shape = self.shape
@@ -755,7 +798,7 @@ class RegularGrid:
                 # TODO get signature from operators and input_range
                 signature='v={},shape={},bl={},out_sz={},fb={}'.format(*map(str, [self.STRUCTURE_VERSION, shape, backward_length, self.output_size, self.feedback])),
                 name='sign')
-            inputs = self.create_inputs()
+            inputs = self._create_inputs()
 
             # iterate through the grid
             for i, j in grid:
