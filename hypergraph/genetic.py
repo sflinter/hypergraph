@@ -206,7 +206,7 @@ class TournamentSelection:
 
 class MutationOnlyEvoStrategy:
     """
-    mu+lambda evolutionary strategy
+    mu+lambda evolutionary strategy.
     """
 
     # TODO pass a 'scheduler' (eg. hyperband) and use it to assign the resources to each evaluation of the fitness
@@ -214,6 +214,28 @@ class MutationOnlyEvoStrategy:
                  opt_mode='max', mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
                  selector=TournamentSelection(), callbacks=opt.ConsoleLog()):
+        """
+        Init the mu+lambda evolutionary strategy.
+        :param graph_or_config_ranges: A graph or tweaks configs to be used as phenotype.
+        :param fitness: A fitness function that given a dictionary of tweaks as arguments returns a measure of
+        performance
+        :param opt_mode: The type of optimization to be performed, the value can be either 'max' or 'min'.
+        :param mutation_prob: The probability of having a mutation. If a tuple containing two probabilities is provided
+        then these are considered the minimum and maximum probability. In this case the mutation probability is randomly
+        selected within the specified interval each time we have a new mutation.
+        :param mutation_groups_prob: A specific mutation probability for each tweak group can be specified through a
+        dictionary where the key is the group name and the value is the probability to be applied to the group.
+        :param population_size: The size of the population.
+        :param lambda_: The number of children that each parent generates.
+        :param elitism: The genetic algorithms elitism.
+        :param generations: The number of generations to be evolved.
+        :param target_score: If specified, when the fitness value reaches this value then this determines
+        a stop condition.
+        :param selector: The selector that performs the selection of the individuals that pass to the next generation
+        for successive reproduction.
+        :param callbacks: A callback or a list of callbacks. The callbacks are instances of the
+        class optimizer.Callback.
+        """
         # TODO remove opt_mode, minimize in all cases, to maximize just minimize -fitness(...)
         if opt_mode not in ['min', 'max']:
             raise ValueError()
@@ -260,11 +282,23 @@ class MutationOnlyEvoStrategy:
         return None if p is None else dict(p.gene)
 
     def _apply_fitness(self, population):
+        """
+        Given a population compute the fitness for each individual.
+        :param population:
+        :return:
+        """
         fitness = self.fitness
         for p in population:
             p.score = fitness(p.gene)
 
     def _create_parent_offspring(self, parent, gen_id=None):
+        """
+        Given a parent generate the offspring through mutation only.
+        :param parent: The individual to be used as parent.
+        :param gen_id: The generation identifier.
+        :return: A list of newly generated individuals.
+        """
+
         p = self.mutation_prob
         gp = self.mutation_groups_prob
         if isinstance(p, tuple):
@@ -275,9 +309,9 @@ class MutationOnlyEvoStrategy:
         mut = self.gene.mutations
 
         max_trials = 1000
-        for t in range(max_trials):
+        for t in range(max_trials):     # check uniqueness of the children
             ret = [opt.Individual(mut(parent, prob=pf(), groups_prob=gp), gen_id=gen_id) for _ in range(self.lambda_)]
-            # TODO if len(set([frozenset(k.gene.items()) for k in ret])) != self.lambda_:   # check uniqueness of the children
+            # TODO if len(set([frozenset(k.gene.items()) for k in ret])) != self.lambda_:
             # TODO    continue
             # Problem here, some values may be unhashable
             return ret

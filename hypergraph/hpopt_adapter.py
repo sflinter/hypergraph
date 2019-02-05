@@ -39,9 +39,11 @@ _PERM_ADAPTERS_KEY = '__hg2hpopt_perm_adapters__'
 
 def tweaks2hpopt(tweaks: dict):
     """
-    Adapt the tweaks based on class tweaks.Distribution to Hyperopt
-    :param tweaks:
-    :return:
+    Adapt the tweaks based on class tweaks.Distribution to Hyperopt. Not all distributions present in this framework
+    are supported by Hyperopt so we overcome to this limitation by creating some temporary structures that
+    Hyperopt can manage.
+    :param tweaks: A dictionary of tweak configs.
+    :return: A new dictionary of tweaks that Hyperopt can manage.
     """
     output_hp = {}
     perm_adapters_keys = []
@@ -60,16 +62,34 @@ def tweaks2hpopt(tweaks: dict):
     return output_hp
 
 
-def expand_hpopt_adapters(tweaks: dict):
+def _expand_perm(desc):
     """
-    Expand tweaks adapters after hypeopt processing
-    :param tweaks:
-    :return:
+    Expand the permutation, the parameter is a descriptor of the form:
+    {
+        'indexes': [randint(n), randint(n-1), ...],
+        'values': [values...]
+    }
+    :param desc:
+    :return: A list of selected values according to the permutation indexes
     """
-    perm_adapters_keys = tweaks.get(_PERM_ADAPTERS_KEY)
-    output = dict(tweaks)
+    values = list(desc.values)
+    output = list()
+    for idx in desc.indexes:
+        output.append(values[idx])
+        del values[idx]
+    return output
+
+
+def expand_hpopt_adapters(params: dict):
+    """
+    Expand tweaks adapters after Hyperopt processing
+    :param params: The tweaks processed by hyperopt
+    :return: A new tweaks dictionary with the internal Hyperopt tricks expanded
+    """
+    perm_adapters_keys = params.get(_PERM_ADAPTERS_KEY)
+    output = dict(params)
     if perm_adapters_keys is not None:
         del output[_PERM_ADAPTERS_KEY]
-        # TODO
-        raise NotImplemented()
+        for key in perm_adapters_keys:
+            output[key] = _expand_perm(output[key])     # substitute with the expanded permutation
     return output
