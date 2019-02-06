@@ -158,3 +158,7 @@ provided [here](examples/cgp-gym1.py). The following animation is an example of 
 __Figure 3__ A perfect solution of the OpenAI CartPole environment obtained through Hypergraph CGP.
 
 It should be noted that both the CGP and optimisation routines are general and can be easily tailored for a given problem by specifying a suitable set of operations and an appropriate fitness function.
+
+![cgp-evolution](./doc/cgp-evolution-1.png)
+
+__Figure 4__ The evolution of the CGP's fitness over 40 generations. The target score is reached after only 40 epochs.

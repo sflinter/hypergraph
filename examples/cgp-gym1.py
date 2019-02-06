@@ -33,20 +33,18 @@ if model_file is not None:
         model = tweaks.TweaksSerializer.load(ins, graph=grid)
 else:
     history = History()
-    strategy = MutationOnlyEvoStrategy(grid, fitness=gymman.create_fitness(grid), generations=10**3,
-                                       target_score=250, mutation_prob=0.1, mutation_groups_prob={'cgp_output': 0.6},
-                                       lambda_=9, callbacks=[history, ConsoleLog(), ModelCheckpoint('/tmp/')])
-    strategy()  # run the evolutionary algorithm
-    print("best:" + str(strategy.best))
+    best = hg.optimize(algo='genetic', graph=grid, fitness=gymman.create_fitness(grid),
+                       generations=10**3, target_score=250, mutation_prob=0.1,  # these are algo specific params
+                       mutation_groups_prob={'cgp_output': 0.6}, lambda_=9,
+                       callbacks=[history, ConsoleLog(), ModelCheckpoint('/tmp/')])
+    print("best:" + str(best))
 
     history = pd.DataFrame(history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
-    # history.set_index('idx')
     if graphics_enabled:
         import matplotlib.pyplot as plt
         history.plot(x='gen_idx', y=['best_score', 'population_mean_score'])
         plt.show()
-    # print(history)
-    model = strategy.best
+    model = best
 
 print('symbolic execution: ' + str(cgp.exec_symbolically(grid, tweaks=model)))
 

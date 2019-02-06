@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import importlib
 
 
 class HGError(Exception):
@@ -25,6 +26,28 @@ def export(f):
     else:
         mod.__all__ = [f.__name__]
     return f
+
+
+def get_hg_module_obj(name: str):
+    """
+    Load and return a module or class relative to this framework.
+    The identifier follows this form: <hg_module_name>.<class>.<...>
+    :param name:
+    :return: A module or class object
+    """
+    name = name.split('.')
+    if len(name[0]) == 0:
+        raise ValueError()
+    obj = importlib.import_module('.' + name[0], package='hypergraph')
+    if len(name) < 2:
+        return obj
+    name = name[1:]
+
+    for n in name:
+        if len(n) == 0:
+            raise ValueError()
+        obj = getattr(obj, n)
+    return obj
 
 
 class MsgPackEncoders:

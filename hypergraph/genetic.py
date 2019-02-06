@@ -204,7 +204,7 @@ class TournamentSelection:
         return idxs_subset[idx]
 
 
-class MutationOnlyEvoStrategy:
+class MutationOnlyEvoStrategy(opt.OptimizerBase):
     """
     mu+lambda evolutionary strategy.
     """
@@ -251,17 +251,13 @@ class MutationOnlyEvoStrategy:
         self.target_score = None if target_score is None else float(target_score)
         self.selector = selector
 
-        self.callbacks = []
-        if isinstance(callbacks, opt.Callback):
-            self.callbacks.append(callbacks)
-        elif callbacks is not None:
-            self.callbacks.extend(callbacks)
-
         self.gene = GeneticBase(graph_or_config_ranges)
 
         self.population = None
         self.last_gen_id = -1
         self._best = None
+
+        super().__init__(callbacks=callbacks)
 
     def reset(self):
         """

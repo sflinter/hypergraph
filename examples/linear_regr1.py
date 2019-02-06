@@ -3,7 +3,6 @@
 # genetic algorithm. Note that, the use of genetic algorithms for the linear model is just for demonstrative purposes.
 
 import hypergraph as hg
-from hypergraph.genetic import MutationOnlyEvoStrategy
 from hypergraph.optimizer import History, ConsoleLog
 import numpy as np
 import pandas as pd
@@ -44,12 +43,9 @@ def fitness(individual):
 graph1 = test1()
 
 history = History()
-strategy = MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='min',
-                                   generations=1000, mutation_prob=0.1, lambda_=4,
-                                   callbacks=[ConsoleLog(), history])
-strategy()  # run the evolutionary algorithm
-print()
-best = strategy.best
+best = hg.optimize(algo='genetic', graph=graph1, fitness=fitness,
+                   opt_mode='min', generations=1000, mutation_prob=0.1, lambda_=4,
+                   callbacks=[ConsoleLog(), history])   # run the evolutionary algorithm
 print("best:" + str(best))  # print the dict with the best configuration of parameters (AKA tweaks)
 
 fig, axs = plt.subplots(nrows=1, ncols=2)

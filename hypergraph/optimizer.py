@@ -2,6 +2,7 @@ from datetime import datetime
 import sys
 import os
 from . import tweaks
+from . import utils as hgu
 
 
 class Individual:
@@ -28,6 +29,11 @@ class Individual:
 
 
 class Callback:
+    """
+    Base class for callbacks. Callbacks are functions invoked by optimization algorithms during the various
+    phases of the search.
+    """
+
     def __init__(self):
         self.model = None
 
@@ -42,6 +48,12 @@ class Callback:
 
 
 class History(Callback):
+    """
+    History is a simple callback that records the status of the optimization at the end of each generation
+    of the optimization algorithm. The concept of generation is relative to the specific algorithm that is
+    executing the task.
+    """
+
     def __init__(self):
         self.generations = []
         super().__init__()
@@ -85,10 +97,17 @@ class ConsoleLog(Callback):
 
 class ModelCheckpoint(Callback):
     """
-    A callback that saves the best model after every hit.
+    A callback that saves the best model after every hit. The model is serialized using the
+    class tweaks.TweaksSerializer. Every checkpoint file is constructed using the datetime at the moment
+    of the invocation. Old checkpoints are not overwritten.
     """
 
     def __init__(self, path='.'):
+        """
+        Initialize the callback.
+        :param path: The path where the checkpoint is stored.
+        """
+        # TODO param file prefix
         self.path = path
         super().__init__()
 
@@ -99,3 +118,45 @@ class ModelCheckpoint(Callback):
         file = os.path.join(self.path, f'model-{time}')
         with open(file, 'wb') as outs:
             tweaks.TweaksSerializer.save(self.model.best, outs)
+
+
+class OptimizerBase:
+    """
+    The base class for all optimizers.
+    """
+    def __init__(self, *, callbacks=None):
+        """
+        Initialize the base class for optimizers.
+        :param callbacks: A callback or a list of callbacks. The callbacks are instances of the
+        class optimizer.Callback.
+        """
+        self.callbacks = []
+        if isinstance(callbacks, Callback):
+            self.callbacks.append(callbacks)
+        elif callbacks is not None:
+            self.callbacks.extend(callbacks)
+
+
+algos_registry = {
+    'tpe': 'tpe.TreeParzenEstimator',
+    'genetic': 'genetic.MutationOnlyEvoStrategy'
+}
+
+
+@hgu.export
+def optimize(algo: str, *, graph, fitness, callbacks=None, **kwargs):
+    """
+    Run an optimization algorithm identified by the parameter algo. Currently the algorithms available
+    are 'tpe' (Tree Parzer Estimator) and 'genetic'. For more details on the specific implementations
+    and parameters see genetic.MutationOnlyEvoStrategy and tpe.TreeParzenEstimator.
+    :param algo: A string identifying the algorithm
+    :param fitness: A fitness function that given a dictionary of tweaks as arguments returns a measure of performance.
+    :param callbacks: A callback or a list of callbacks. The callbacks are instances of the class optimizer.Callback.
+    :param kwargs: Specific arguments that are passed to the constructor of the selected algorithm.
+    :return: The best set of tweaks
+    """
+    # TODO fix inconsistency, by default tpe minimizes and genetic maximizes
+    algo_class = hgu.get_hg_module_obj(algos_registry[algo])
+    obj = algo_class(graph, fitness=fitness, callbacks=callbacks, **kwargs)
+    obj()
+    return obj.best
