@@ -144,19 +144,19 @@ algos_registry = {
 
 
 @hgu.export
-def optimize(algo: str, *, graph, fitness, callbacks=None, **kwargs):
+def optimize(algo: str, *, graph, objective, callbacks=None, **kwargs):
     """
     Run an optimization algorithm identified by the parameter algo. Currently the algorithms available
     are 'tpe' (Tree Parzer Estimator) and 'genetic'. For more details on the specific implementations
     and parameters see genetic.MutationOnlyEvoStrategy and tpe.TreeParzenEstimator.
     :param algo: A string identifying the algorithm
-    :param fitness: A fitness function that given a dictionary of tweaks as arguments returns a measure of performance.
+    :param objective: An objective function that given a dictionary of tweaks as argument returns a measure
+    to be minimized.
     :param callbacks: A callback or a list of callbacks. The callbacks are instances of the class optimizer.Callback.
     :param kwargs: Specific arguments that are passed to the constructor of the selected algorithm.
     :return: The best set of tweaks
     """
-    # TODO fix inconsistency, by default tpe minimizes and genetic maximizes
     algo_class = hgu.get_hg_module_obj(algos_registry[algo])
-    obj = algo_class(graph, fitness=fitness, callbacks=callbacks, **kwargs)
+    obj = algo_class(graph, objective=objective, callbacks=callbacks, **kwargs)
     obj()
     return obj.best

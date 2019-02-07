@@ -10,7 +10,7 @@ The key concept of this library is the graph, a structure composed by interconne
 The connections between nodes play the crucial part, these can be optimized through meta-heurisitic optimisation algorithms (e.g. genetic algorithms).
 The result is a network of nodes composed by "moving parts" which can be somehow altered by global optimization algorithms.
 The "moving parts" of the structure are called tweaks. The optimization algorithms require a measure of
-fitness, which is user-defined, to understand the effect of each tweak on the task to be optimized.
+performance, which is user-defined, to understand the effect of each tweak on the task to be optimized.
 
 The purpose of the project is purely experimental and we are willing to accept any contribution and comment. 
 
@@ -109,25 +109,26 @@ model_graph.compile_model.optimizer | 'type': 'UniformChoice', 'space': {'type':
 
 ##### Invoke the optimization algorithm
 Once the graph structure is ready we instantiate the graph and run the optimization algorithm on its tweaks.
-At this point we need a measure of fitness to be applied to each 'tweaked' graph. The fitness function also takes care of the execution of the model. The code snippet below shows
-the simple steps necessary to define a fitness and run an evolutionary algorithm.
+At this point we need a measure of performance to be applied to each 'tweaked' graph. This measure is provided by the user-defined function *objective*. The optimizer goal is to minimize the objective. 
+The objective function also takes care of the execution of the model. The code snippet below shows
+the simple steps necessary to define an objective and run an evolutionary algorithm.
 In this case, we are employing a genetic algorithm, this is just for demonstration purposes, indeed the framework can be easily extended and other optimization methods will be included.
 
 ```python
 graph1 = model_graph()  # create a graph
 
 
-def fitness(individual):
+def objective(individual):
     print(f'Trial, tweaks={individual}')
     model = hg.run(graph1, tweaks=individual)
     history = model.fit(x=x_train, y=y_train, epochs=4, validation_data=(x_test, y_test))
     # The number of epochs here could be handled by resources allocation algorithms such as Hyperband.
     # This feature will be soon available on hypergraph.
-    return np.max(history.history['val_acc'])
+    return -np.max(history.history['val_acc'])
 
 
 history = History()     # the history callback records the evolution of the algorithm
-strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='max',
+strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, objective=objective,
                                               generations=20, mutation_prob=(0.1, 0.8), lambda_=4,
                                               callbacks=[ConsoleLog(), history])
 strategy()  # run the evolutionary strategy
@@ -157,7 +158,7 @@ provided [here](examples/cgp-gym1.py). The following animation is an example of 
 
 __Figure 3__ A perfect solution of the OpenAI CartPole environment obtained through Hypergraph CGP.
 
-It should be noted that both the CGP and optimisation routines are general and can be easily tailored for a given problem by specifying a suitable set of operations and an appropriate fitness function.
+It should be noted that both the CGP and optimisation routines are general and can be easily tailored for a given problem by specifying a suitable set of operations and an appropriate objective function.
 
 ![cgp-evolution](./doc/cgp-evolution-1.png)
 

@@ -33,8 +33,8 @@ if model_file is not None:
         model = tweaks.TweaksSerializer.load(ins, graph=grid)
 else:
     history = History()
-    best = hg.optimize(algo='genetic', graph=grid, fitness=gymman.create_fitness(grid),
-                       generations=10**3, target_score=250, mutation_prob=0.1,  # these are algo specific params
+    best = hg.optimize(algo='genetic', graph=grid, objective=gymman.create_objective(grid),
+                       generations=10**3, target_score=-250, mutation_prob=0.1,  # these are algo specific params
                        mutation_groups_prob={'cgp_output': 0.6}, lambda_=9,
                        callbacks=[history, ConsoleLog(), ModelCheckpoint('/tmp/')])
     print("best:" + str(best))

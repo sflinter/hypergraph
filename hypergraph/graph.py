@@ -1393,6 +1393,20 @@ class Graph:
         return self.get_hpopt_config_ranges()
 
     @staticmethod
+    def copy_tweaks_config(graph):
+        """
+        Get the tweaks config from a graph, otherwise, it graph is already a dictionary
+        of tweaks config, create a copy and return it.
+        :param graph: A graph or a dictionary of tweaks
+        :return:
+        """
+        if isinstance(graph, Graph):
+            return graph.get_hpopt_config_ranges()
+        if isinstance(graph, dict):
+            return dict(graph)
+        raise ValueError()
+
+    @staticmethod
     def get_node_ext(node, graph=None):
         if graph is not None:
             if not isinstance(graph, Graph):

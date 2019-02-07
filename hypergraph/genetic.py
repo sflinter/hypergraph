@@ -27,16 +27,7 @@ class GeneticBase:
             self.init_phenotype(graph)
 
     def init_phenotype(self, graph_or_config_ranges: [hgg.Graph, dict]):
-        if isinstance(graph_or_config_ranges, hgg.Graph):
-            phenotype = graph_or_config_ranges.get_hpopt_config_ranges()
-        else:
-            phenotype = dict(graph_or_config_ranges)
-
-        if len(phenotype.keys()) <= 2:
-            # raise ValueError("Insufficient number of genes")
-            # phenotype['_internal_placeholder_77177ce9d789'] = tweaks.Uniform()
-            pass
-        self.phenotype = phenotype
+        self.phenotype = hgg.Graph.copy_tweaks_config(graph_or_config_ranges)
 
     @staticmethod
     def _sample_distr_tweak(d):
@@ -209,17 +200,16 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
     mu+lambda evolutionary strategy.
     """
 
-    # TODO pass a 'scheduler' (eg. hyperband) and use it to assign the resources to each evaluation of the fitness
-    def __init__(self, graph_or_config_ranges: hgg.Graph, fitness, *,
-                 opt_mode='max', mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
+    # TODO pass a 'scheduler' (eg. hyperband) and use it to assign the resources to each evaluation of the objective
+    def __init__(self, graph_or_config_ranges: hgg.Graph, objective, *,
+                 mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
                  selector=TournamentSelection(), callbacks=opt.ConsoleLog()):
         """
         Init the mu+lambda evolutionary strategy.
         :param graph_or_config_ranges: A graph or tweaks configs to be used as phenotype.
-        :param fitness: A fitness function that given a dictionary of tweaks as arguments returns a measure of
-        performance
-        :param opt_mode: The type of optimization to be performed, the value can be either 'max' or 'min'.
+        :param objective: A function that given a dictionary of tweaks as argument returns a measure to be
+        minimized.
         :param mutation_prob: The probability of having a mutation. If a tuple containing two probabilities is provided
         then these are considered the minimum and maximum probability. In this case the mutation probability is randomly
         selected within the specified interval each time we have a new mutation.
@@ -229,19 +219,14 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         :param lambda_: The number of children that each parent generates.
         :param elitism: The genetic algorithms elitism.
         :param generations: The number of generations to be evolved.
-        :param target_score: If specified, when the fitness value reaches this value then this determines
+        :param target_score: If specified, when the objective value reaches this value then this determines
         a stop condition.
         :param selector: The selector that performs the selection of the individuals that pass to the next generation
         for successive reproduction.
         :param callbacks: A callback or a list of callbacks. The callbacks are instances of the
         class optimizer.Callback.
         """
-        # TODO remove opt_mode, minimize in all cases, to maximize just minimize -fitness(...)
-        if opt_mode not in ['min', 'max']:
-            raise ValueError()
-
-        self.fitness = fitness
-        self.opt_mode = opt_mode
+        self.objective = objective
         self.mutation_prob = mutation_prob
         self.mutation_groups_prob = None if mutation_groups_prob is None else dict(mutation_groups_prob)
         self.population_size = population_size
@@ -277,15 +262,15 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         p = self._best
         return None if p is None else dict(p.gene)
 
-    def _apply_fitness(self, population):
+    def _apply_objective(self, population):
         """
-        Given a population compute the fitness for each individual.
+        Given a population compute the objective for each individual.
         :param population:
         :return:
         """
-        fitness = self.fitness
+        objective = self.objective
         for p in population:
-            p.score = fitness(p.gene)
+            p.score = objective(p.gene)
 
     def _create_parent_offspring(self, parent, gen_id=None):
         """
@@ -327,28 +312,15 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         target_score = self.target_score
         selector = self.selector
 
-        def score_cmp_min(a, b):
-            return a <= b
-
         def sort_min(a):
             a = list(a)
             return np.argsort(a)
 
-        def score_cmp_max(a, b):
-            return a >= b
-
-        def sort_max(a):
-            a = list(a)
-            return np.argsort(a)[::-1]
-
         def apply_perm(lst, idxs):
             return [lst[i] for i in idxs]
 
-        score_cmp = score_cmp_min if self.opt_mode == 'min' else score_cmp_max
-        sort_op = sort_min if self.opt_mode == 'min' else sort_max
-
         def update_best(candidate: opt.Individual):
-            if (self._best is None) or score_cmp(candidate.score, self._best.score):
+            if (self._best is None) or (candidate.score <= self._best.score):
                 self._best = candidate.copy()
                 return True
             return False
@@ -361,8 +333,8 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
             # TODO if we restart then we need the id of the previous generation
             gen_id = self.last_gen_id + 1
             population = [opt.Individual(p, gen_id=gen_id) for p in self.gene.create_population(size=self.population_size)]
-            self._apply_fitness(population)
-            population = apply_perm(population, sort_op(opt.Individual.get_scores(population)))
+            self._apply_objective(population)
+            population = apply_perm(population, sort_min(opt.Individual.get_scores(population)))
             self.population = population
             self.last_gen_id = gen_id
 
@@ -373,9 +345,9 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
             # create new offspring
             offspring = itertools.chain(*[self._create_parent_offspring(parent, gen_id=c) for parent in population])
             offspring = list(offspring)
-            self._apply_fitness(offspring)
+            self._apply_objective(offspring)
             offspring.extend(population[:self.elitism])     # preserve the best parents
-            offspring = apply_perm(offspring, sort_op(opt.Individual.get_scores(offspring)))
+            offspring = apply_perm(offspring, sort_min(opt.Individual.get_scores(offspring)))
 
             hit = update_best(offspring[0])     # update the best ever
 
@@ -392,7 +364,7 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
 
             target_achieved = False
             if hit:
-                if (target_score is not None) and score_cmp(self._best.score, target_score):
+                if (target_score is not None) and (self._best.score <= target_score):
                     target_achieved = True
 
             if len(self.callbacks):

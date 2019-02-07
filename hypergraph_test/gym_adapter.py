@@ -176,7 +176,7 @@ class GymManager:
             'output_size': self.adapters[1].get_graph_output_size()
         }
 
-    def create_fitness(self, graph: hg.Graph):
+    def create_objective(self, graph: hg.Graph):
         if not isinstance(graph, hg.Graph):
             raise ValueError()
 
@@ -202,5 +202,5 @@ class GymManager:
                         total_reward += reward
                         if done:
                             break
-            return total_reward/trials
+            return -total_reward/trials
         return fitness

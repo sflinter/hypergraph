@@ -36,15 +36,15 @@ def test1():
     return loss_func(y1=y_hat, y2=hg.input_key('y'))  # loss = E((y-y_hat)^2)
 
 
-def fitness(individual):
+def objective(individual):
     return hg.run(graph1, tweaks=individual, x=x_train, y=y_train)
 
 
 graph1 = test1()
 
 history = History()
-best = hg.optimize(algo='genetic', graph=graph1, fitness=fitness,
-                   opt_mode='min', generations=1000, mutation_prob=0.1, lambda_=4,
+best = hg.optimize(algo='genetic', graph=graph1, objective=objective,
+                   generations=1000, mutation_prob=0.1, lambda_=4,
                    callbacks=[ConsoleLog(), history])   # run the evolutionary algorithm
 print("best:" + str(best))  # print the dict with the best configuration of parameters (AKA tweaks)
 

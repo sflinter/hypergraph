@@ -118,17 +118,17 @@ graph1 = model_graph()  # create a graph
 hg.tweaks.dump_tweaks(graph1)   # dump the tweaks config for inspection
 
 
-def fitness(individual):
+def objective(individual):
     print(f'Trial, tweaks={individual}')
     model = hg.run(graph1, tweaks=individual)
     history = model.fit(x=x_train, y=y_train, epochs=4, validation_data=(x_test, y_test))
     # The number of epochs here could be handled by resources allocation algorithms such as Hyperband.
     # This feature will be soon available on hypergraph.
-    return np.max(history.history['val_acc'])
+    return -np.max(history.history['val_acc'])
 
 
 history = History()     # the history callback records the evolution of the algorithm
-strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='max',
+strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, objective=objective,
                                               generations=20, mutation_prob=(0.1, 0.8), lambda_=4,
                                               callbacks=[ConsoleLog(), history])
 strategy()  # run the evolutionary strategy

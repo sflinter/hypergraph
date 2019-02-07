@@ -74,7 +74,7 @@ with graph1.as_default():
     hg.output() << hg.call1(lambda _: time_history.get_total_time()) << hg.deps(fit)
 
 
-def fitness(individual):
+def objective(individual):
     try:
         return hg.run(graph1, tweaks=individual)
     except:
@@ -83,7 +83,7 @@ def fitness(individual):
 
 
 history = History()
-strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, fitness=fitness, opt_mode='min',
+strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, objective=objective,
                                               generations=50, mutation_prob=0.1, lambda_=4,
                                               callbacks=[ConsoleLog(), history])
 strategy()
