@@ -1,7 +1,7 @@
 # A series of adapters to access some important algorithms of the notorious hyperopt, a well-established library
 # for hyper-parameters optimization.
 
-import hyperopt as hp
+from hyperopt import hp
 from . import tweaks as Tweaks
 from .utils import HGError
 
@@ -13,9 +13,16 @@ def _uniform(key, tweak: Tweaks.Uniform):
     return hp.uniform(key, r[0], r[1])
 
 
+def _quniform(key, tweak: Tweaks.QUniform):
+    if tweak.size is not None:
+        raise HGError('QUniform distribution with non-None size not supported')
+    r = tweak.range
+    return hp.quniform(key, r[0], r[1], tweak.q)
+
+
 def _uniform_perm(key, tweak: Tweaks.UniformPermutation):
     n = len(tweak.values)
-    return {
+    return {    # TODO use a namedtuple
         'indexes': [hp.randint(str(key)+'-perm-'+str(i), n-i) for i in range(tweak.k)],
         'values': list(tweak.values)
     }
@@ -30,6 +37,7 @@ def _normal(key, tweak: Tweaks.Normal):
 _adapters = {
     Tweaks.UniformChoice: lambda k, t: hp.choice(k, t.values),
     Tweaks.Uniform: _uniform,
+    Tweaks.QUniform: _quniform,
     Tweaks.Normal: _normal,
     Tweaks.UniformPermutation: _uniform_perm
 }
@@ -56,7 +64,8 @@ def tweaks2hpopt(tweaks: dict):
             if isinstance(value, Tweaks.UniformPermutation):
                 perm_adapters_keys.append(key)
             output_hp[key] = adapter(key, value)
-        output_hp[key] = value
+        else:
+            output_hp[key] = value
     if len(perm_adapters_keys):
         output_hp[_PERM_ADAPTERS_KEY] = perm_adapters_keys
     return output_hp
@@ -72,9 +81,9 @@ def _expand_perm(desc):
     :param desc:
     :return: A list of selected values according to the permutation indexes
     """
-    values = list(desc.values)
+    values = list(desc['values'])
     output = list()
-    for idx in desc.indexes:
+    for idx in desc['indexes']:
         output.append(values[idx])
         del values[idx]
     return output
