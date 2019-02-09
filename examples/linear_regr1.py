@@ -46,6 +46,7 @@ history = History()
 best = hg.optimize(algo='genetic', graph=graph1, objective=objective,
                    generations=1000, mutation_prob=0.1, lambda_=4,
                    callbacks=[ConsoleLog(), history])   # run the evolutionary algorithm
+print()
 print("best:" + str(best))  # print the dict with the best configuration of parameters (AKA tweaks)
 
 fig, axs = plt.subplots(nrows=1, ncols=2)

@@ -38,20 +38,28 @@ else:
                            callbacks=[gen_history, ConsoleLog(), ModelCheckpoint('/tmp/')],
                            generations=10**3, target_score=-250, mutation_prob=0.1,  # these are algo specific params
                            mutation_groups_prob={'cgp_output': 0.6}, lambda_=9)
-    # Run the Tree Parzen Estimator optimization
+    # Run the Tree-structured Parzen Estimator optimization
+    # The interesting and unusual thing here is that we are optimizing genetic programming with Bayesian optimization!
     tpe_best = hg.optimize(algo='tpe', graph=grid, objective=gymman.create_objective(grid),
                            callbacks=[tpe_history, ConsoleLog()],
                            target_score=-250,  max_evals=10**3)   # these are algo specific params
+    print()
     print("best:" + str(gen_best))
+
+    def col_opposite(frame, col):
+        frame[col] = frame[col].apply(lambda x: -x)
 
     ax = plt.subplot(1, 2, 1)
     ax.set_title('Genetic algo evolution')
     history = pd.DataFrame(gen_history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
+    col_opposite(history, 'best_score')
+    col_opposite(history, 'population_mean_score')
     history.plot(x='gen_idx', y=['best_score', 'population_mean_score'], ax=ax)
 
     ax = plt.subplot(1, 2, 2)
     ax.set_title('TPE algo evolution')
     history = pd.DataFrame(tpe_history.generations, columns=['gen_idx', 'best_score'])
+    col_opposite(history, 'best_score')
     history.plot(x='gen_idx', y='best_score', ax=ax)
 
     plt.show()

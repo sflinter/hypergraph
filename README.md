@@ -12,10 +12,10 @@ The result is a network of nodes composed by "moving parts" which can be somehow
 The "moving parts" of the structure are called tweaks. The optimization algorithms require a measure of
 performance, which is user-defined, to understand the effect of each tweak on the task to be optimized.
 The optimization algorithms currently available are __Genetic__ and __Tree-structured Parzen Estimator__.
-The __Tree-structured Parzen Estimator__ (in short tpe) implementation is inherited from the outstanding
+The __Tree-structured Parzen Estimator__ (in short TPE) implementation is inherited from the outstanding
 hyper-parameter optimization library [Hyperopt](https://github.com/hyperopt/hyperopt).
 
-The purpose of the project is purely experimental and we are willing to accept any __contribution__ and comment. 
+The purpose of the project is purely experimental and we are willing to accept any __contribution__ and __comment__. 
 
 ## Getting Started  with Hypergraph
 ##### Installation
@@ -127,18 +127,19 @@ def objective(individual):
     history = model.fit(x=x_train, y=y_train, epochs=4, validation_data=(x_test, y_test))
     # The number of epochs here could be handled by resources allocation algorithms such as Hyperband.
     # This feature will be soon available on hypergraph.
+    
+    # We take the opposite of the maximum validation accuracy achieved as
+    # measure to be minimized.
     return -np.max(history.history['val_acc'])
 
 
 history = History()     # the history callback records the evolution of the algorithm
-strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, objective=objective,
-                                              generations=20, mutation_prob=(0.1, 0.8), lambda_=4,
-                                              callbacks=[ConsoleLog(), history])
-strategy()  # run the evolutionary strategy
-print("best:" + str(strategy.best))     # print a dictionary containing the tweaks that determined the best performance
+best = hg.optimize(algo='genetic', graph=graph1, objective=objective, callbacks=[ConsoleLog(), history],
+                   generations=20, mutation_prob=(0.1, 0.8), lambda_=4)     # these are algo specific parameters
+print("best:" + str(best))     # print a dictionary containing the tweaks that determined the best performance
 ```
 
-When the optimization algorithm reaches its stop condition we can extract the best set of tweaks through the field *best*. Given a set of tweaks
+When the optimization algorithm reaches its stop condition it returns the best set of tweaks. Given a set of tweaks
 we can execute the graph with the configuration applied through the call *hg.run(graph1, tweaks=best)*.
 
 ![keras-hyperparam-opt-fitness-evolution](./doc/keras-hyperparam-opt-fitness-evolution.png)
@@ -165,4 +166,4 @@ It should be noted that both the CGP and optimisation routines are general and c
 
 ![cgp-evolution](./doc/cgp-evolution-1.png)
 
-__Figure 4__ The evolution of the CGP's score with two different optimizers. Notably, in this case, genetic algorithms seems to reach the target loss faster than TPE.
+__Figure 4__ The evolution of the CGP's score with two different optimizers: __genetic__ and __TPE__. Notably, in this case, genetic algorithms seem to reach the target loss faster than TPE.

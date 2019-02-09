@@ -83,13 +83,18 @@ def objective(individual):
 
 
 history = History()
-strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, objective=objective,
-                                              generations=50, mutation_prob=0.1, lambda_=4,
-                                              callbacks=[ConsoleLog(), history])
-strategy()
+best = hg.optimize(algo='genetic', graph=graph1, objective=objective, callbacks=[ConsoleLog(), history],
+                   generations=50, mutation_prob=0.1, lambda_=4)
 print()
-print("best:" + str(strategy.best))
+print("best:" + str(best))
+
+
+def col_opposite(frame, col):
+    frame[col] = frame[col].apply(lambda x: -x)
+
 
 history = pd.DataFrame(history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
+col_opposite(history, 'best_score')
+col_opposite(history, 'population_mean_score')
 history.plot(x='gen_idx', y=['best_score', 'population_mean_score'])
 plt.show()
