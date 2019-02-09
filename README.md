@@ -166,4 +166,4 @@ It should be noted that both the CGP and optimisation routines are general and c
 
 ![cgp-evolution](./doc/cgp-evolution-1.png)
 
-__Figure 4__ The evolution of the CGP's score with two different optimizers: __genetic__ and __TPE__. Notably, in this case, genetic algorithms seem to reach the target loss faster than TPE.
+__Figure 4__ The evolution of the CGP's score with two different optimizers: __genetic__ and __TPE__. Notably, in this case, genetic algorithms seem to reach the target score faster than TPE.
