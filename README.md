@@ -11,8 +11,11 @@ The connections between nodes play the crucial part, these can be optimized thro
 The result is a network of nodes composed by "moving parts" which can be somehow altered by global optimization algorithms.
 The "moving parts" of the structure are called tweaks. The optimization algorithms require a measure of
 performance, which is user-defined, to understand the effect of each tweak on the task to be optimized.
+The optimization algorithms currently available are __Genetic__ and __Tree-structured Parzen Estimator__.
+The __Tree-structured Parzen Estimator__ (in short tpe) implementation is inherited from the outstanding
+hyper-parameter optimization library [Hyperopt](https://github.com/hyperopt/hyperopt).
 
-The purpose of the project is purely experimental and we are willing to accept any contribution and comment. 
+The purpose of the project is purely experimental and we are willing to accept any __contribution__ and comment. 
 
 ## Getting Started  with Hypergraph
 ##### Installation
@@ -162,4 +165,4 @@ It should be noted that both the CGP and optimisation routines are general and c
 
 ![cgp-evolution](./doc/cgp-evolution-1.png)
 
-__Figure 4__ The evolution of the CGP's fitness over 40 generations. The target score is reached after only 40 epochs.
+__Figure 4__ The evolution of the CGP's score with two different optimizers. Notably, in this case, genetic algorithms seems to reach the target loss faster than TPE.

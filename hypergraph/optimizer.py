@@ -116,8 +116,10 @@ class ModelCheckpoint(Callback):
             return
         time = str(datetime.now().isoformat()).replace(':', '_').replace('.', '_')
         file = os.path.join(self.path, f'model-{time}')
-        with open(file, 'wb') as outs:
-            tweaks.TweaksSerializer.save(self.model.best, outs)
+        model = self.model.best
+        if model is not None:
+            with open(file, 'wb') as outs:
+                tweaks.TweaksSerializer.save(self.model.best, outs)
 
 
 class OptimizerBase:

@@ -8,6 +8,10 @@ import numpy as np
 import copy
 
 
+class _EndOfTrials(Exception):
+    pass
+
+
 class TreeParzenEstimator(opt.OptimizerBase):
     """
     Tree Parzen estimator strategy. This is based on the Hyperopt implementation.
@@ -45,7 +49,7 @@ class TreeParzenEstimator(opt.OptimizerBase):
         :return:
         """
         p = self._best
-        return None if p is None else dict(p.gene)
+        return None if p is None else dict(p)
 
     def __call__(self):
         """
@@ -61,9 +65,10 @@ class TreeParzenEstimator(opt.OptimizerBase):
             callback.on_strategy_begin()
 
         class MyObjective:
-            def __init__(self, objective, callbacks):
+            def __init__(self, objective, callbacks, target_score):
                 self.objective = objective
                 self.callbacks = callbacks
+                self.target_score = target_score
 
                 self.idx = 0
                 self.best_score = np.inf
@@ -78,7 +83,6 @@ class TreeParzenEstimator(opt.OptimizerBase):
                     hit = True
                     self.best_score = ret
                     self.best = copy.copy(tweaks)
-                # TODO use target_score
 
                 rec = {'gen_idx': self.idx,
                        'gen_time': time.monotonic() - start_time,
@@ -89,9 +93,16 @@ class TreeParzenEstimator(opt.OptimizerBase):
                 for callback in self.callbacks:
                     callback.on_gen_end(rec)
 
+                self.idx += 1
+                if self.target_score is not None and ret <= self.target_score:
+                    raise _EndOfTrials()
                 return {'loss': ret, 'status': hyperopt.STATUS_OK}
 
         hp_tweaks = hp_ada.tweaks2hpopt(self.tweaks_config)
-        my_objective = MyObjective(objective=self.objective, callbacks=self.callbacks)
-        hyperopt.fmin(my_objective, space=hp_tweaks, algo=hyperopt.tpe.suggest, max_evals=self.max_evals)
+        my_objective = MyObjective(objective=self.objective, callbacks=self.callbacks, target_score=self.target_score)
+        try:
+            hyperopt.fmin(my_objective, space=hp_tweaks, algo=hyperopt.tpe.suggest, max_evals=self.max_evals,
+                          show_progressbar=False)
+        except _EndOfTrials:
+            pass
         self._best = my_objective.best

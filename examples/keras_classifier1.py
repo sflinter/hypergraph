@@ -128,12 +128,9 @@ def objective(individual):
 
 
 history = History()     # the history callback records the evolution of the algorithm
-strategy = hg.genetic.MutationOnlyEvoStrategy(graph1, objective=objective,
-                                              generations=20, mutation_prob=(0.1, 0.8), lambda_=4,
-                                              callbacks=[ConsoleLog(), history])
-strategy()  # run the evolutionary strategy
-print()
-print("best:" + str(strategy.best))     # print a dictionary containing the tweaks that determined the best performance
+best = hg.optimize(algo='genetic', graph=graph1, objective=objective, callbacks=[ConsoleLog(), history],
+                   generations=20, mutation_prob=(0.1, 0.8), lambda_=4)
+print("best:" + str(best))     # print a dictionary containing the tweaks that determined the best performance
 
 history = pd.DataFrame(history.generations, columns=['gen_idx', 'best_score', 'population_mean_score'])
 history.plot(x='gen_idx', y=['best_score', 'population_mean_score'])

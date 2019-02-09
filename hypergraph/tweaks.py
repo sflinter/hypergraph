@@ -190,7 +190,7 @@ class QUniform(Distribution):
         self.size = size
 
         if q == 1.0:
-            self.gen = lambda: np.random.randint(low=low, high=high, size=size)
+            self.gen = lambda: int(np.random.randint(low=low, high=high+1, size=size))
         else:
             self.gen = lambda: int(np.round(np.random.uniform(low=low, high=high, size=size) / q) * q)
         super().__init__(space_descriptor={'type': 'discrete', 'boundaries': (_qround(low, q=q), _qround(high, q=q))})
@@ -302,7 +302,7 @@ class Switch(g.Node):
     """
 
     def __init__(self, default=None, name=None, distribution_group=None):
-        #TODO allow different probabilities for different inputs
+        # TODO allow different probabilities for different inputs
         self.default = default
         self.distribution_group = distribution_group
         super().__init__(name)
@@ -317,7 +317,7 @@ class Switch(g.Node):
         if isinstance(input_binding, dict):
             return {self.fully_qualified_name: UniformChoice(input_binding.keys(), group=self.distribution_group)}
 
-        return {self.fully_qualified_name: QUniform(high=len(input_binding), group=self.distribution_group)}
+        return {self.fully_qualified_name: QUniform(high=len(input_binding)-1, group=self.distribution_group)}
 
     def get_input_binding(self, hpopt_config={}):
         choice = hpopt_config.get(self.fully_qualified_name, self.default)
