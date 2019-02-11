@@ -139,6 +139,8 @@ best = hg.optimize(algo='genetic', graph=graph1, objective=objective, callbacks=
 print("best:" + str(best))     # print a dictionary containing the tweaks that determined the best performance
 ```
 
+The optimizer is invoked through the call *hg.optimize*. This is a unique function that can be used to invoke any of the
+optimizers provided by the library.
 When the optimization algorithm reaches its stop condition it returns the best set of tweaks. Given a set of tweaks
 we can execute the graph with the configuration applied through the call *hg.run(graph1, tweaks=best)*.
 

@@ -1,3 +1,5 @@
+# Tree-structured Parzen Estimator optimizer for Hypergraph.
+
 import hyperopt
 from . import graph as hgg
 from . import optimizer as opt

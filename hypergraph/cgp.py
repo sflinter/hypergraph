@@ -18,7 +18,9 @@ class Operators(ABC):
     def __init__(self, input_count=2):
         """
         Init the base class for the grid's operators. The number of inputs for each node is fixed for all nodes.
-        :param input_count: The number of inputs for each node.
+        :param input_count: The number of inputs for each node. By inputs we mean the parameters that are considered
+        variables, note that each operator function will have a third parameter, a constant one that remain fixed
+        for a certain node of the CGP grid.
         """
         if not isinstance(input_count, int):
             raise ValueError()
@@ -107,8 +109,10 @@ class FuncMark:
     def __init__(self, group: str=None, *, sym_exp=None):
         """
         Init func factory
-        :param group: Name of the group that this operator belongs
-        :param sym_exp: a custom function to be used for symbolic expansion
+        :param group: Name of the group that this operator belongs. The group name can be used to activate/deactivate
+        groups of operators. See the method Operators.set_selection for more insights.
+        :param sym_exp: a custom function to be used for symbolic expansion. This is particularly useful during
+        the symbolic execution, because we can hide identity nodes that would not contribute with any information.
         """
         self.group = group
         self.sym_exp = sym_exp
@@ -160,6 +164,13 @@ class DelayOperators(Operators):
 
 
 class TensorOperators(Operators):
+    """
+    CGP Operators for tensor data (numpy ndarray). These operators accept 3 input parameters, two tensors and one
+    constant scalar. The constant scalar parameter p,is considered part of the operator, thus given a node in the
+    CGP grid, then p remains constant after the evolution of the program.
+    All parameters have scalar values with the following domain: [-1, 1].
+    """
+
     clip_params = {'a_min': -1, 'a_max': 1}
     SERIALIZER_TYPE = 'hg.cgp.tensor_ops.op'
 
@@ -208,9 +219,15 @@ class TensorOperators(Operators):
 
     @property
     def null_value(self):
+        """
+        Return the scalar constant zero.
+        """
         return 0.
 
     def null_like(self, x):
+        """
+        Return a tensor with the same shape as the parameter x but filled with zeros.
+        """
         return self.create_const_v(x, 0.)
 
     @staticmethod
@@ -231,38 +248,64 @@ class TensorOperators(Operators):
     @staticmethod
     @FuncMark('base', sym_exp=lambda x, y, p: x)
     def op_identity(x, y, p):
+        """
+        An operator that acts as identity with respect to the first parameter (x).
+        """
         return x
 
     @staticmethod
     @FuncMark('base', sym_exp=lambda x, y, p: y)
     def op_ywire(x, y, p):
+        """
+        An operator that acts as identity with respect to the second parameter (y).
+        """
         return y
 
     @staticmethod
     @FuncMark('base', sym_exp=lambda x, y, p: p)
     def op_const(x, y, p):
+        """
+        Return the const param p. Note that beside p appears as an input variable, its value remain fixed for a
+        specific node in the CGP grid.
+        """
         return p
 
     @staticmethod
     def create_const_v(x, p):
+        """
+        Return a tensor with the same shape as x but filled with the value of the parameter p (p is a scalar).
+        """
         v = np.empty_like(x)
         v.fill(p)
         return v
 
     @FuncMark('base')
     def op_const_v(self, x, y, p):
+        """
+        Return a tensor with the same shape as x but filled with the value of the parameter p.
+        """
         return self.create_const_v(x, p)
 
     @FuncMark('base')
     def op_zeros(self, x, y, p):
+        """
+        Return a tensor with the same shape as x but filled with zeros.
+        """
         return self.create_const_v(x, 0.)
 
     @FuncMark('base')
     def op_ones(self, x, y, p):
+        """
+        Return a tensor with the same shape as x but filled with ones.
+        """
         return self.create_const_v(x, 1.)
 
     @FuncMark('base')
     def op_head(self, x, y, p):
+        """
+        Return the first element of x, this is equivalent to x[0]. Note that the first element may be a tensor
+        as well.
+        """
         # TODO head and tail should refer to the default_axis
         return self.unary_vec_op_or_ident(x, lambda v: v[0])
 
@@ -513,10 +556,18 @@ class TensorOperators(Operators):
 
 
 class SymbolicEntity:
+    """
+    The base class for the placeholder used for symbolic execution. Symbolic execution is a method implemented
+    into our CGP implementation that allows the extraction of the formula that represents the evolved program.
+    """
     pass
 
 
 class SymbolicInvocation(SymbolicEntity):
+    """
+    A symbolic entity that represents a function invocation.
+    """
+
     def __init__(self, f, params):
         self.f = f
         self.params = params
@@ -534,6 +585,10 @@ class SymbolicInvocation(SymbolicEntity):
 
 
 class SymbolicVariable(SymbolicEntity):
+    """
+    A symbolic entity that represents an external variable identified by name.
+    """
+
     def __init__(self, name):
         self.name = name
         self.indexes = None
@@ -560,6 +615,14 @@ class SymbolicVariable(SymbolicEntity):
 
 
 def exec_symbolically(graph: hgg.Graph, tweaks={}):     # TODO move all to graph?
+    """
+    Execute a graph symbolically. The nodes used in this graph must support the symbolic execution.
+    The returned value is a syntax tree containing symbolic entities that represent the formula implemented by the
+    graph. See the class SymbolicEntity and its subclasses for more details.
+    :param graph:
+    :param tweaks:
+    :return:
+    """
     if not isinstance(graph, hgg.Graph):
         raise ValueError()
 
@@ -587,6 +650,12 @@ class Cell(hgg.Node):
     SYMBOLIC_TWEAK = '__hg__.cgp.symbolic'
 
     def __init__(self, operators: Operators, op_distr=None, name=None):
+        """
+        Init the cell node.
+        :param operators: The operators to be used for this node.
+        :param op_distr:
+        :param name: The name of the node, this is relative to the graph.
+        """
         if not isinstance(operators, Operators):
             raise ValueError()
         if not isinstance(op_distr, (tweaks.Distribution, type(None))):
