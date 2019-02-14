@@ -119,6 +119,11 @@ hg.tweaks.dump_tweaks(graph1)   # dump the tweaks config for inspection
 
 
 def objective(individual):
+    """
+    The objective function that is minimized by the optimizer.
+    :param individual: A set of tweaks for the graph.
+    :return: The score achieved by the tweaks provided as argument.
+    """
     print(f'Trial, tweaks={individual}')
     model = hg.run(graph1, tweaks=individual)
     history = model.fit(x=x_train, y=y_train, epochs=4, validation_data=(x_test, y_test))

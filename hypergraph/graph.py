@@ -10,6 +10,7 @@ import weakref
 from .utils import export
 import uuid
 import pandas as pd
+import networkx as nx
 
 # Separator used in fully qualified names
 FQ_NAME_SEP = '.'
@@ -758,7 +759,7 @@ def aggregator(on_enter=None):
     :return:
     """
     def real_decorator(func):
-        def wrapper(name=None, **kwargs):
+        def wrapper(name=None, **kwargs) -> Graph:
             if name is None:
                 name = func.__name__
 
@@ -1214,7 +1215,25 @@ class Graph:
         """
         cls._default = None
 
-    def __init__(self, name=None, default_output=None, callback: GraphCallback=None):
+    def to_nx_graph(self):
+        """
+        Convert the current graph into a networkX graph. The edges related to dependencies are marked with the
+        attribute type='dep' whereas edges related to the data flow between nodes have attribute type='data'
+        :return:
+        """
+        output = nx.DiGraph()
+
+        def add_edges_for_node(name, neighbours, **kwargs):
+            output.add_edges_from(map(lambda nb: (nb.name, name), get_nodes_from_struct(neighbours)), **kwargs)
+
+        output.add_nodes_from(self.nodes.keys())
+        for k, bindings in self.links.items():
+            add_edges_for_node(k, bindings, type='data')
+        for k, deps in self.deps.items():
+            add_edges_for_node(k, deps, type='dep')
+        return output
+
+    def __init__(self, name=None, default_output=None, callback: GraphCallback = None):
         """
         Init a new graph.
         :param name: The name of the graph, this will be used to form the fully qualified names for the nodes.

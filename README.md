@@ -4,14 +4,11 @@
 
 # Hypergraph #
 
-__Hypergraph__ is an open source library originally developed to provide a high level of abstraction when developing machine learning and deep neural networks.
-
-The key concept of this library is the graph, a structure composed by interconnected nodes.
+__Hypergraph__ is machine learning training scheduler and hyper-parameters optimizer. It has been developed to provide a high level of abstraction when developing machine learning and deep neural networks.
+In this framework, everything rotates around graphs where nodes are atomic operations of a certain process that has to be optimized.
 The connections between nodes play the crucial part, these can be optimized through meta-heurisitic optimisation algorithms (e.g. genetic algorithms).
-The result is a network of nodes composed by "moving parts" which can be somehow altered by global optimization algorithms.
-The "moving parts" of the structure are called tweaks. The optimization algorithms require a measure of
-performance, which is user-defined, to understand the effect of each tweak on the task to be optimized.
-The optimization algorithms currently available are __Genetic__ and __Tree-structured Parzen Estimator__.
+The result is a network of nodes composed by "moving parts" (called *tweaks*) which can be tuned by optimization algorithms.
+The global optimization algorithms currently available are __Genetic__ and __Tree-structured Parzen Estimator__.
 The __Tree-structured Parzen Estimator__ (in short TPE) implementation is inherited from the outstanding
 hyper-parameter optimization library [Hyperopt](https://github.com/hyperopt/hyperopt).
 
@@ -32,7 +29,7 @@ The core data structure of Hypergraph is a directed __graph__. Each graph consis
 __nodes__. The information in form of python objects, flows from the inputs, gets transformed and continues toward the single output that each node has.
 Methods for creating nodes and adding them to a graph are demonstrated in the next sections. We start with a relatively
 simple example where we use our framework to optimize the structure and some parameters of a neural network implemented
-through [Keras](https://github.com/keras-team/keras). Despite we used Keras in all examples related to neural networks,
+through [Keras](https://github.com/keras-team/keras). Despite Keras has been used in all examples related to neural networks,
 Hypergraph is completely agnostic to the various deep learning frameworks. 
 
 ##### Creating Nodes
@@ -122,6 +119,11 @@ graph1 = model_graph()  # create a graph
 
 
 def objective(individual):
+    """
+    The objective function that is minimized by the optimizer.
+    :param individual: A set of tweaks for the graph.
+    :return: The score achieved by the tweaks provided as argument.
+    """
     print(f'Trial, tweaks={individual}')
     model = hg.run(graph1, tweaks=individual)
     history = model.fit(x=x_train, y=y_train, epochs=4, validation_data=(x_test, y_test))

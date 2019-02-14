@@ -316,6 +316,9 @@ class TensorOperators(Operators):
     @staticmethod
     @FuncMark('base')
     def op_ravel(x, y, p):
+        """
+        Return a tensor which is the reduction of the tensor passed through the parameter x to a 1D array.
+        """
         if isinstance(x, np.ndarray):
             return np.ravel(x)
         return x
@@ -323,6 +326,9 @@ class TensorOperators(Operators):
     @staticmethod
     @FuncMark('base')
     def op_transpose(x, y, p):
+        """
+        Return a transposed version of the tensor passed through the parameter x.
+        """
         if isinstance(x, np.ndarray):
             return np.transpose(x)
         return x
@@ -343,6 +349,14 @@ class TensorOperators(Operators):
 
     @staticmethod
     def binary_op(op, x, y):
+        """
+        Helper for binary operators.
+        :param op: A function to be used as binary operator for the parameters x and y.
+        :param x:
+        :param y:
+        :return:
+        """
+
         isarray = map(lambda v: isinstance(v, np.ndarray), (x, y))
         if all(isarray):
             min_dim = np.minimum(len(x.shape), len(y.shape))
