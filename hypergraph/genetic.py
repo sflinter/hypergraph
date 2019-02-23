@@ -98,22 +98,24 @@ class GeneticBase:
             dict(f(parents[1], keys[0]) + f(parents[0], keys[1]))
         ]
 
-    def mutations(self, individual, prob, groups_prob=None):
+    def mutations(self, individual, prob):
         """
         Apply mutations to the provided individual. Every gene has the same probability of being mutated.
         :param individual: The individual as instance of class Individual or a dictionary containing its tweaks
-        :param prob: Gene mutation probability, this is the default probability, that is the one applied to
-        groups that don't have a specific value
-        :param groups_prob: A dictionary containing items of the form group_name:prob. This map specifies a custom
-        probability for each declared group. The group name matches the Distribution.group property.
+        :param prob: Gene mutation probability. If this parameter is a callable then it has the form
+        func(keys, size=None) and it is used to specify a custom probability for each gene.
         :return: The mutated individual as a dict of tweaks
         """
 
+        # *** groups_prob removed ***
+        # if callable(prob) and groups_prob is not None:
+        #    raise ValueError('callable prob and groups probabilities are mutual exclusive')
+
         phe = self.phenotype
 
-        def get_custom_prob(key_):
-            g = phe[key_].group
-            return prob if g is None else groups_prob.get(g, prob)
+        # def get_custom_prob(key_):
+        #    g = phe[key_].group
+        #    return prob if g is None else groups_prob.get(g, prob)
 
         if isinstance(individual, opt.Individual):
             individual = individual.gene
@@ -130,10 +132,15 @@ class GeneticBase:
         gene_keys = map(lambda it: it[0], gene_keys)
         gene_keys = np.array(list(gene_keys))
 
-        if groups_prob is None:
-            probs = prob
-        else:
-            probs = list(map(get_custom_prob, gene_keys))
+        if callable(prob):
+            # prob is callable, so we get specific probabilities by key
+            prob = prob(gene_keys)
+
+        probs = prob
+        # if groups_prob is None:
+        #    probs = prob
+        # else:
+        #    probs = list(map(get_custom_prob, gene_keys))
 
         selection = np.where(np.random.uniform(size=len(gene_keys)) < probs)
         gene_keys = gene_keys[selection]
@@ -145,13 +152,17 @@ class GeneticBase:
         gene_keys = map(lambda it: it[0], gene_keys)
         gene_keys = np.array(list(gene_keys))
 
-        if groups_prob is None:
-            probs = itertools.repeat(prob)
-        else:
-            probs = list(map(get_custom_prob, gene_keys))
+        probs = itertools.repeat(prob)
+        # if groups_prob is None:
+        #    probs = itertools.repeat(prob)
+        # else:
+        #    probs = list(map(get_custom_prob, gene_keys))
 
         for key, p in zip(gene_keys, probs):
-            individual[key] = phe[key].mutation(current_value=individual[key], prob=p)
+            aggr = phe[key]
+            if callable(p):
+                p = p((key, ), size=aggr.size)[0]
+            individual[key] = aggr.mutation(current_value=individual[key], prob=p)
 
         return individual
 
@@ -201,7 +212,7 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
 
     # TODO pass a 'scheduler' (eg. hyperband) and use it to assign the resources to each evaluation of the objective
     def __init__(self, graph_or_config_ranges: hgg.Graph, objective, *,
-                 mutation_prob=(0.1, 0.8), mutation_groups_prob=None,
+                 mutation_prob=(0.1, 0.8),
                  population_size=1, lambda_=4, elitism=1, generations=10**4, target_score=None,
                  selector=TournamentSelection(), callbacks=opt.ConsoleLog()):
         """
@@ -212,8 +223,6 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         :param mutation_prob: The probability of having a mutation. If a tuple containing two probabilities is provided
         then these are considered the minimum and maximum probability. In this case the mutation probability is randomly
         selected within the specified interval each time we have a new mutation.
-        :param mutation_groups_prob: A specific mutation probability for each tweak group can be specified through a
-        dictionary where the key is the group name and the value is the probability to be applied to the group.
         :param population_size: The size of the population.
         :param lambda_: The number of children that each parent generates.
         :param elitism: The genetic algorithms elitism.
@@ -227,7 +236,7 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         """
         self.objective = objective
         self.mutation_prob = mutation_prob
-        self.mutation_groups_prob = None if mutation_groups_prob is None else dict(mutation_groups_prob)
+        # self.mutation_groups_prob = None if mutation_groups_prob is None else dict(mutation_groups_prob)
         self.population_size = population_size
         self.lambda_ = lambda_
         self.elitism = elitism
@@ -280,17 +289,22 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         """
 
         p = self.mutation_prob
-        gp = self.mutation_groups_prob
-        if isinstance(p, tuple):
-            pf = lambda: np.random.uniform(p[0], p[1])
+        if isinstance(p, (tuple, list)):
+            def prob_gen(keys, size=None):
+                if size is None:
+                    size = (len(keys), )
+                else:
+                    size = (len(keys), ) + size
+                return np.random.uniform(low=p[0], high=p[1], size=size)
+            pf = prob_gen
         else:
-            pf = lambda: p
+            pf = p
 
         mut = self.gene.mutations
 
         max_trials = 1000
         for t in range(max_trials):     # check uniqueness of the children
-            ret = [opt.Individual(mut(parent, prob=pf(), groups_prob=gp), gen_id=gen_id) for _ in range(self.lambda_)]
+            ret = [opt.Individual(mut(parent, prob=pf), gen_id=gen_id) for _ in range(self.lambda_)]
             # TODO if len(set([frozenset(k.gene.items()) for k in ret])) != self.lambda_:
             # TODO    continue
             # Problem here, some values may be unhashable

@@ -36,8 +36,8 @@ else:
     # Run the genetic optimization
     gen_best = hg.optimize(algo='genetic', graph=grid, objective=gymman.create_objective(grid),
                            callbacks=[gen_history, ConsoleLog(), ModelCheckpoint('/tmp/')],
-                           generations=10**3, target_score=-250, mutation_prob=0.1,  # these are algo specific params
-                           mutation_groups_prob={'cgp_output': 0.6}, lambda_=9)
+                           generations=10**3, target_score=-250,    # these are algo specific params
+                           mutation_prob=(0.1, 0.8), lambda_=9)
     # Run the Tree-structured Parzen Estimator optimization
     # The interesting and unusual thing here is that we are optimizing genetic programming with Bayesian optimization!
     tpe_best = hg.optimize(algo='tpe', graph=grid, objective=gymman.create_objective(grid),

@@ -84,7 +84,7 @@ def objective(individual):
 
 history = History()
 best = hg.optimize(algo='genetic', graph=graph1, objective=objective, callbacks=[ConsoleLog(), history],
-                   generations=50, mutation_prob=0.1, lambda_=4)
+                   generations=50, mutation_prob=(0.1, 0.8), lambda_=4)
 print()
 print("best:" + str(best))
 

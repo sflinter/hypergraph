@@ -104,7 +104,7 @@ class Aggregation(Distribution):
         A specific helper for genetic algorithms. A subset of the aggregated variables is selected with
         probability prob and mutation is applied by resampling the generated values from the base distribution.
         :param current_value:
-        :param prob:
+        :param prob: A float or list of floats representing the probability of mutation
         :return:
         """
         selection = np.where(np.random.uniform(size=self.size) < prob)

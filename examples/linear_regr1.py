@@ -19,8 +19,8 @@ y_train = np.array([1.7, 2.76, 2.09, 3.19, 1.694, 1.573,
 
 
 @hg.function()
-@hg.decl_tweaks(w=hg.Uniform(low=-3, high=3))     # prior distributions for w and b
-@hg.decl_tweaks(b=hg.Uniform(low=-1, high=1))
+@hg.decl_tweaks(w=hg.Uniform(low=-5, high=5))     # prior distributions for w and b
+@hg.decl_tweaks(b=hg.Uniform(low=-10, high=10))
 def model_func(x, w, b):
     return x*w + b
 
@@ -44,7 +44,7 @@ graph1 = test1()
 
 history = History()
 best = hg.optimize(algo='genetic', graph=graph1, objective=objective,
-                   generations=1000, mutation_prob=0.1, lambda_=4,
+                   generations=1000, mutation_prob=(0.1, 0.8), lambda_=4,
                    callbacks=[ConsoleLog(), history])   # run the evolutionary algorithm
 print()
 print("best:" + str(best))  # print the dict with the best configuration of parameters (AKA tweaks)
