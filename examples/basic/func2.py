@@ -1,5 +1,5 @@
 import hypergraph as hg
-from hypergraph.genetic import GeneticBase
+from hypergraph.genetic import GeneticOperators
 
 
 @hg.decl_tweaks(y=hg.tweaks.Uniform())
@@ -14,7 +14,7 @@ with graph1.as_default():
     hg.output() << (hg.call(test1) << {'x': 2})
 
 
-genetic = GeneticBase(graph1)
+genetic = GeneticOperators(graph1)
 print(genetic.phenotype)
 tweaks = genetic.create_population(1)[0]
 print(tweaks)

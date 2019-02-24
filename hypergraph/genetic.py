@@ -7,9 +7,10 @@ from . import optimizer as opt
 import itertools
 import time
 from datetime import datetime
+import pandas as pd
 
 
-class GeneticBase:
+class GeneticOperators:
     """
     Basic routines for genetic algorithms. This class contains a phenotype composed by a dictionary
     of <key>:<distribution> pairs.
@@ -21,7 +22,7 @@ class GeneticBase:
         :param graph: The graph used to initialize the phenotype.
         """
 
-        self.phenotype = None
+        self.phenotype = {}
         if graph is not None:
             self.init_phenotype(graph)
 
@@ -147,7 +148,7 @@ class GeneticBase:
         for key in gene_keys:
             individual[key] = phe[key].sample()
 
-        # special handling for tweaks of type Aggregation
+        # *** special handling for tweaks of type Aggregation ***
         gene_keys = filter(lambda it: isinstance(it[1], tweaks.Aggregation), phe.items())
         gene_keys = map(lambda it: it[0], gene_keys)
         gene_keys = np.array(list(gene_keys))
@@ -165,6 +166,31 @@ class GeneticBase:
             individual[key] = aggr.mutation(current_value=individual[key], prob=p)
 
         return individual
+
+    def mdesm_mutation(self, individuals, mf_range=(0.1, 0.8)):
+        """
+        MICRO-DIFFERENTIAL EVOLUTION USING VECTORIZED RANDOM MUTATION FACTOR, mutation
+        :param individuals: A list containing three dictionaries corresponding to the configurations of
+        three individuals.
+        :param mf_range: Mutation factor range.
+        :return:
+        """
+        if len(individuals) != 3:
+            raise ValueError('Three individuals needed')
+        phe = self.phenotype
+        types = map(type, phe.values())
+        if tweaks.Aggregation in types:
+            raise ValueError('Aggregation tweaks not supported by mdesm_mutation')
+            # TODO support aggregations!
+        if not all(map(lambda t: isinstance(t, (tweaks.Uniform, tweaks.Normal)), types)):
+            raise ValueError('Some tweak type is not supported by this mutation')
+
+        individuals = pd.DataFrame.from_dict(individuals)
+        # generate vectorized mutation factor
+        fv = np.random.uniform(low=mf_range[0], high=mf_range[1], size=len(individuals.columns))
+        child = individuals.iloc[0, :].values+fv*(individuals.iloc[1, :].values-individuals.iloc[2, :].values)
+        child = [(k, phe[k].clip(v)) for k, v in zip(individuals.columns, child)]
+        return dict(child)
 
 
 class TournamentSelection:
@@ -222,7 +248,8 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         minimized.
         :param mutation_prob: The probability of having a mutation. If a tuple containing two probabilities is provided
         then these are considered the minimum and maximum probability. In this case the mutation probability is randomly
-        selected within the specified interval each time we have a new mutation.
+        selected within the specified interval each time we have a new mutation. The technique used for the random
+        mutation factor is Vectorized Random Mutation Factor.
         :param population_size: The size of the population.
         :param lambda_: The number of children that each parent generates.
         :param elitism: The genetic algorithms elitism.
@@ -244,7 +271,7 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
         self.target_score = None if target_score is None else float(target_score)
         self.selector = selector
 
-        self.gene = GeneticBase(graph_or_config_ranges)
+        self.gene = GeneticOperators(graph_or_config_ranges)
 
         self.population = None
         self.last_gen_id = -1
@@ -290,6 +317,10 @@ class MutationOnlyEvoStrategy(opt.OptimizerBase):
 
         p = self.mutation_prob
         if isinstance(p, (tuple, list)):
+            # Inspired by the paper "Micro-Differential Evolution withVectorized Random Mutation Factor"
+            # when a tuple is provided as probability we generate a vector of probabilities, one for each
+            # gene. This favor a better exploration of the space because we avoid the sole creation of vectors parallel
+            # to the parent.
             def prob_gen(keys, size=None):
                 if size is None:
                     size = (len(keys), )

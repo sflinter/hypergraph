@@ -1,12 +1,12 @@
 import hypergraph as hg
-from hypergraph.genetic import GeneticBase
+from hypergraph.genetic import GeneticOperators
 
 graph1 = hg.Graph(name="g1")
 with graph1.as_default():
     hg.output() << (hg.permutation(size=3) << list('abcdef'))
 
 # create a population from graph's phenotype
-genetic = GeneticBase(graph1)
+genetic = GeneticOperators(graph1)
 print(genetic.phenotype)
 
 population = genetic.create_population(3)

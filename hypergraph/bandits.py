@@ -1,7 +1,7 @@
 # Multi-armed bandit-based algorithms
 
 import numpy as np
-from .genetic import GeneticBase
+from .genetic import GeneticOperators
 
 
 class HyperBand:
@@ -31,7 +31,7 @@ class HyperBand:
         f_eta = float(self.eta)
         s_max = int(np.floor(np.log(self.max_resources_per_conf)/np.log(f_eta)))
         budget = (s_max+1.)*self.max_resources_per_conf
-        gene = GeneticBase(self.config_ranges)
+        gene = GeneticOperators(self.config_ranges)
         best = (np.inf, None)   # the best observed config, the tuple is of the form (loss_value, config)
 
         for s in range(s_max, -1, -1):

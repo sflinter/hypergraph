@@ -1,5 +1,5 @@
 import hypergraph as hg
-from hypergraph.genetic import GeneticBase
+from hypergraph.genetic import GeneticOperators
 
 
 @hg.decl_tweaks(y=hg.tweaks.Uniform())
@@ -9,7 +9,7 @@ def test1(x, y, z):
 
 
 def tweaks_handler(config):
-    genetic = GeneticBase(config)
+    genetic = GeneticOperators(config)
     print(genetic.phenotype)
     tweaks = genetic.create_population(1)[0]
     print(tweaks)

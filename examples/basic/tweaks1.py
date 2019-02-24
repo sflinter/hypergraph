@@ -1,5 +1,5 @@
 import hypergraph as hg
-from hypergraph.genetic import GeneticBase
+from hypergraph.genetic import GeneticOperators
 
 
 @hg.function()
@@ -19,7 +19,7 @@ def mygraph1():
 graph1 = mygraph1()
 
 # create a population from graph's phenotype
-genetic = GeneticBase(graph1)
+genetic = GeneticOperators(graph1)
 print(genetic.phenotype)
 
 population = genetic.create_population(3)
